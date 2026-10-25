@@ -1,0 +1,1891 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<!-- ARTIFACT-START -->
+<title>Мегалюль 3D</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap">
+<style>
+/* Layout: full-screen 3D view, a thin telemetry row on top, big centered messages, invisible steering halves on touch screens.
+   One look only: a fjord at dusk. Teal water, dark pine slopes, peach-to-plum sky, amber port lamps. */
+:root {
+  --bg: #1b1a2e;
+  --panel: rgba(16, 20, 38, 0.72);
+  --edge: rgba(255, 255, 255, 0.14);
+  --fg: #f1eef6;
+  --muted: #a9a6bd;
+  --accent: #ffb347;
+  --ok: #6fdc8c;
+  --warn: #f5c044;
+  --bad: #f4705f;
+  --display: 'Russo One', 'Arial Black', Impact, sans-serif;
+  --ui: 'Rubik', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--ui); font-size: 14px; overflow: hidden; -webkit-text-size-adjust: 100%; }
+#app { position: relative; height: 100%; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#hud {
+  position: absolute; left: 0; right: 0; top: 0;
+  display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: stretch;
+  padding-block: calc(10px + env(safe-area-inset-top, 0px)) 0; padding-inline: 16px;
+  pointer-events: none; font-variant-numeric: tabular-nums;
+}
+.tile { background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 6px 12px; min-width: 70px; backdrop-filter: blur(6px); }
+.tile .label { display: block; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.tile .value { display: block; font-size: 18px; font-weight: 500; line-height: 1.2; }
+.tile .value.warn { color: var(--warn); }
+.tile .value.bad { color: var(--bad); }
+.tile.brand { font-family: var(--display); color: var(--accent); font-size: 16px; letter-spacing: 0.04em; display: flex; align-items: center; margin-right: auto; }
+.cargo { min-width: 150px; }
+.bar { height: 8px; margin-top: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 100%; background: var(--ok); transition: width 0.15s linear, background 0.3s; }
+.boost { min-width: 120px; }
+.boost .bar i { background: var(--accent); width: 0; }
+.boost.full .bar i { box-shadow: 0 0 10px var(--accent); }
+.tile.mute { pointer-events: auto; cursor: pointer; color: var(--muted); font: inherit; font-size: 12px; min-width: 0; }
+.tile.mute:hover, .tile.mute:focus-visible { color: var(--fg); outline: none; border-color: rgba(255,255,255,0.35); }
+.tile .value.late { color: var(--bad); }
+#msg {
+  position: absolute; left: 0; right: 0; top: 34%; text-align: center; pointer-events: none;
+  font-family: var(--display); font-size: clamp(20px, 4vw, 34px); letter-spacing: 0.05em; color: var(--fg);
+  text-shadow: 0 2px 18px rgba(0,0,0,0.6); opacity: 0; transition: opacity 0.3s;
+}
+#msg.show { opacity: 1; }
+#overlay {
+  position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto;
+  background: rgba(12, 10, 26, 0.66); padding: 16px; box-sizing: border-box; text-align: center; backdrop-filter: blur(3px);
+}
+#overlay[hidden] { display: none; }
+#overlay .card { max-width: 480px; width: 100%; margin: auto; }
+#overlay .card.shop { max-width: 820px; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; text-align: left; margin: 12px 0 16px; }
+.item { background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; min-width: 0; }
+.item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.item-head b { font-weight: 500; }
+.pips { letter-spacing: 3px; font-size: 12px; white-space: nowrap; }
+.pips .on { color: var(--accent); }
+.pips .off { color: rgba(255,255,255,0.18); }
+.item p { font-size: 12px; color: var(--muted); margin: 4px 0 6px; line-height: 1.4; flex: 1; }
+.item-fx { font-size: 11px; letter-spacing: 0.04em; color: var(--fg); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.buy { width: 100%; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: 500 13px var(--ui); cursor: pointer; }
+.buy:hover:not([disabled]), .buy:focus-visible { background: rgba(255,179,71,0.15); outline: none; }
+.buy[disabled] { opacity: 0.4; cursor: default; }
+.btn.alt { background: transparent; color: var(--fg); border: 1px solid var(--edge); }
+.btn + .btn { margin-left: 8px; }
+#overlay h1 { font-family: var(--display); font-size: clamp(32px, 8vw, 58px); letter-spacing: 0.05em; line-height: 1; margin: 0 0 4px; color: var(--accent); text-wrap: balance; text-shadow: 0 4px 28px rgba(255,179,71,0.35); }
+#overlay h2 { font-family: var(--display); font-size: clamp(22px, 5vw, 32px); margin: 0 0 10px; letter-spacing: 0.04em; text-wrap: balance; }
+#overlay .sub { color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 18px; }
+#overlay p { margin: 6px 0; line-height: 1.5; }
+#overlay .rules { text-align: left; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px auto 18px; max-width: 380px; font-size: 13px; }
+#overlay .rules b { font-weight: 500; }
+#overlay .rules span { color: var(--muted); }
+kbd { display: inline-block; min-width: 14px; padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,0.1); border: 1px solid var(--edge); border-bottom-width: 2px; font: 12px var(--ui); color: var(--fg); }
+.score-table { display: grid; grid-template-columns: 1fr auto; gap: 4px 20px; max-width: 300px; margin: 10px auto 16px; font-variant-numeric: tabular-nums; }
+.score-table span:nth-child(even) { text-align: right; font-weight: 500; }
+.score-table .total { border-top: 1px solid var(--edge); padding-top: 6px; margin-top: 4px; color: var(--accent); font-weight: 700; }
+.stars { font-size: 26px; letter-spacing: 6px; color: var(--accent); margin-bottom: 6px; }
+.stars .dim { color: rgba(255,255,255,0.18); }
+/* the shipyard hub: its own screen over the paused 3D view, four buildings on a quay, a panel per room */
+#hub { position: absolute; inset: 0; display: flex; flex-direction: column; background: #1b1a2e; }
+#hub[hidden] { display: none; }
+.hub-top { display: flex; flex-wrap: wrap; gap: 8px 10px; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 0; font-variant-numeric: tabular-nums; }
+.hub-top .tile { pointer-events: auto; }
+.hub-top .tile.brand { margin-right: auto; }
+.hub-top .tile.stock .value { font-size: 15px; }
+.hub-top .xp { width: 90px; margin-left: 6px; }
+.hub-scene { flex: 1; width: 100%; min-height: 0; display: block; }
+.room { cursor: pointer; outline: none; }
+.room .halo { opacity: 0; transition: opacity 0.2s; }
+.room:hover .halo, .room:focus-visible .halo, .room.on .halo { opacity: 1; }
+.room .name { font-family: var(--display); font-size: 22px; letter-spacing: 0.06em; fill: #f1eef6; text-anchor: middle; paint-order: stroke; stroke: rgba(0,0,0,0.45); stroke-width: 4px; }
+.room .lvl { font-family: var(--ui); font-size: 13px; letter-spacing: 0.12em; fill: #ffb347; text-anchor: middle; }
+.room .note { font-family: var(--ui); font-size: 13px; fill: #d9d4e4; text-anchor: middle; }
+.hub-foot { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+#hubPanel { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; box-sizing: border-box; background: rgba(12, 10, 26, 0.72); backdrop-filter: blur(3px); text-align: center; }
+#hubPanel[hidden] { display: none; }
+#hubPanel .card { max-width: 820px; width: 100%; margin: auto; }
+#hubPanel h2 { font-family: var(--display); font-size: clamp(22px, 5vw, 32px); margin: 0 0 4px; letter-spacing: 0.04em; }
+#hubPanel .sub { color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 14px; }
+#hubPanel p { margin: 6px 0; line-height: 1.5; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: center; margin-bottom: 12px; }
+.panel-head .buy { width: auto; }
+.close { position: absolute; top: 14px; right: 16px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--edge); background: var(--panel); color: var(--fg); font: 18px/1 var(--ui); cursor: pointer; }
+.close:hover { border-color: rgba(255,255,255,0.4); }
+.prod { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0 14px; text-align: left; }
+.prod .item .big { font-family: var(--display); font-size: 26px; color: var(--accent); letter-spacing: 0.03em; }
+.prod .bar { margin-top: 8px; }
+.prod .bar i { background: var(--accent); transition: width 0.5s linear; }
+.item.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.item.locked { opacity: 0.55; }
+.item p b { font-weight: 500; color: var(--fg); }
+.tag { display: inline-block; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--muted); margin-left: 6px; vertical-align: middle; white-space: nowrap; }
+.tag.hot { background: rgba(244,112,95,0.2); color: var(--bad); }
+.tag.night { background: rgba(127,211,255,0.15); color: #7fd3ff; }
+.stat { display: grid; grid-template-columns: 74px 1fr; gap: 4px 8px; align-items: center; font-size: 11px; color: var(--muted); margin: 4px 0 10px; }
+.stat .bar { margin: 0; height: 6px; }
+.stat .bar i { background: var(--accent); transition: none; }
+.pay { font-family: var(--display); font-size: 18px; color: var(--accent); letter-spacing: 0.03em; margin-top: 4px; }
+.meta { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; margin: 2px 0 8px; }
+.rankup { background: rgba(255,179,71,0.14); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 12px; margin: 10px auto; max-width: 380px; font-size: 13px; }
+.xp { width: 120px; height: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--edge); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.xp i { display: block; height: 100%; background: var(--accent); }
+#hubPanel h2.sub2 { font-size: 20px; margin: 18px 0 8px; }
+@media (max-width: 560px) { .room .name { font-size: 30px; } .room .lvl, .room .note { font-size: 18px; } .hub-top .tile.optional { display: none; } }
+.btn { display: inline-block; margin-top: 6px; padding: 10px 24px; border-radius: 6px; cursor: pointer; background: var(--accent); color: #1a1206; border: none; font: 500 15px var(--ui); letter-spacing: 0.02em; }
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+#radio {
+  position: absolute; left: 16px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); max-width: min(460px, calc(100% - 32px));
+  background: var(--panel); border: 1px solid var(--edge); border-left: 4px solid var(--accent); border-radius: 6px; padding: 8px 12px;
+  backdrop-filter: blur(6px); pointer-events: none; font-size: 14px; line-height: 1.35; animation: radioIn 0.25s ease-out; box-sizing: border-box;
+}
+#radio.disp { border-left-color: #7fd3ff; }
+#radio .who { display: block; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 2px; }
+#radio.disp .who { color: #7fd3ff; }
+#radio.both { border-left-color: #c9a0ff; }
+#radio.both .who { color: #c9a0ff; }
+#radio[hidden] { display: none; }
+@keyframes radioIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (pointer: coarse) { #radio { left: 16px; right: 16px; max-width: none; bottom: calc(152px + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: reduce) { #radio { animation: none; } }
+#touch { position: absolute; inset: 0; display: none; pointer-events: none; }
+#touch .zone { position: absolute; top: 25%; bottom: 0; width: 50%; pointer-events: auto; touch-action: none; }
+#touch .zone.l { left: 0; } #touch .zone.r { right: 0; }
+#touch .zone::after {
+  content: ''; position: absolute; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.25); background: rgba(16,20,38,0.4);
+}
+#touch .zone.l::after { left: 22px; } #touch .zone.r::after { right: 22px; }
+#touch .zone.on::after { background: rgba(255,179,71,0.5); border-color: var(--accent); }
+#touch .brake {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  width: 120px; height: 52px; border-radius: 26px; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--edge); font: 500 14px var(--ui); letter-spacing: 0.1em;
+}
+#touch .brake.on { background: rgba(244,112,95,0.6); }
+@media (pointer: coarse) { #touch { display: block; } }
+@media (max-width: 560px) {
+  .tile { padding: 5px 9px; min-width: 56px; }
+  .tile .value { font-size: 15px; }
+  .cargo { min-width: 100px; }
+  .boost { min-width: 90px; }
+  .tile.optional { display: none; }
+  #overlay .rules { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i, #msg { transition: none; } }
+</style>
+<div id="app">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div class="tile brand">МЕГАЛЮЛЬ</div>
+    <div class="tile optional"><span class="label">Порт</span><span class="value" id="hudLevel">—</span></div>
+    <div class="tile"><span class="label">До порта</span><span class="value" id="hudDist">0 м</span></div>
+    <div class="tile cargo"><span class="label">Груз · <span id="hudCargoPct">100%</span></span><div class="bar"><i id="hudCargo"></i></div></div>
+    <div class="tile boost" id="boostTile"><span class="label">Форсаж</span><div class="bar"><i id="hudBoost"></i></div></div>
+    <div class="tile"><span class="label">Ход</span><span class="value" id="hudSpeed">0 уз</span></div>
+    <div class="tile"><span class="label">Осталось</span><span class="value" id="hudTime">0:00</span></div>
+    <div class="tile optional"><span class="label">Заработано</span><span class="value" id="hudMoney">0 ₽</span></div>
+    <button class="tile mute" id="muteBtn" type="button" title="Звук (M)">Звук: вкл</button>
+  </div>
+  <div id="msg"></div>
+  <div id="radio" hidden><span class="who" id="radioWho">Капитан</span><span class="line" id="radioText"></span></div>
+  <div id="touch">
+    <div class="zone l" data-key="left"></div>
+    <div class="zone r" data-key="right"></div>
+    <button class="brake" type="button" data-key="down">СТОП</button>
+  </div>
+  <div id="overlay"></div>
+  <div id="hub" hidden>
+    <div class="hub-top" id="hubTop"></div>
+    <svg class="hub-scene" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet" aria-label="Верфь">
+      <defs>
+        <linearGradient id="hSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2448"/><stop offset="0.55" stop-color="#c96a7f"/><stop offset="1" stop-color="#f2b88c"/></linearGradient>
+        <linearGradient id="hWater" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b6a7c"/><stop offset="1" stop-color="#143c4a"/></linearGradient>
+        <filter id="hGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="10"/></filter>
+      </defs>
+      <rect width="1000" height="560" fill="url(#hSky)"/>
+      <circle cx="840" cy="128" r="40" fill="#ffd3a1" opacity="0.9"/>
+      <path d="M0 300 L120 220 L240 270 L360 200 L470 260 L600 190 L720 250 L850 210 L1000 260 L1000 372 L0 372 Z" fill="#2c3a4a"/>
+      <path d="M0 330 L90 290 L200 320 L330 280 L450 320 L580 270 L700 310 L820 280 L1000 320 L1000 372 L0 372 Z" fill="#223042"/>
+      <rect x="0" y="420" width="1000" height="140" fill="url(#hWater)"/>
+      <rect x="740" y="372" width="260" height="48" fill="url(#hWater)"/>
+      <g stroke="rgba(255,255,255,0.12)" stroke-width="2"><line x1="60" y1="536" x2="170" y2="536"/><line x1="430" y1="546" x2="520" y2="546"/><line x1="730" y1="538" x2="850" y2="538"/></g>
+      <rect x="0" y="372" width="740" height="48" fill="#7d8389"/>
+      <rect x="0" y="372" width="740" height="10" fill="#9aa0a6"/>
+      <rect x="734" y="372" width="8" height="48" fill="#5e626f"/>
+      <g fill="#3d4248"><rect x="248" y="332" width="4" height="40"/><rect x="498" y="332" width="4" height="40"/><rect x="716" y="332" width="4" height="40"/></g>
+      <g fill="#ffd58a"><circle cx="250" cy="330" r="5"/><circle cx="500" cy="330" r="5"/><circle cx="718" cy="330" r="5"/></g>
+      <g class="room" data-room="office" tabindex="0" role="button" aria-label="Контора">
+        <rect class="halo" x="44" y="186" width="200" height="200" rx="18" fill="#ffb347" filter="url(#hGlow)"/>
+        <rect x="70" y="252" width="150" height="120" fill="#f1efe6"/>
+        <rect x="62" y="240" width="166" height="14" fill="#7a3f38"/>
+        <g fill="#ffd58a"><rect x="84" y="268" width="30" height="24"/><rect x="124" y="268" width="30" height="24"/><rect x="164" y="268" width="30" height="24"/><rect x="164" y="310" width="30" height="24"/></g>
+        <g fill="#1d4b66"><rect x="84" y="310" width="30" height="24"/><rect x="124" y="310" width="30" height="24"/></g>
+        <rect x="132" y="338" width="26" height="34" fill="#3d4248"/>
+        <rect x="78" y="204" width="134" height="24" rx="3" fill="#1b1a2e" stroke="#ffb347"/>
+        <text x="145" y="221" fill="#ffb347" font-family="'Russo One', Impact, sans-serif" font-size="12" letter-spacing="2" text-anchor="middle">ОАО МЕГАЛЮЛЬ</text>
+        <line x1="232" y1="186" x2="232" y2="252" stroke="#3d4248" stroke-width="3"/>
+        <rect x="233" y="188" width="24" height="14" fill="#c0432f"/>
+        <text class="name" x="145" y="458">Контора</text>
+        <text class="lvl" x="145" y="478" id="lvlOffice">● ○ ○</text>
+        <text class="note" x="145" y="500" id="noteOffice"></text>
+      </g>
+      <g class="room" data-room="plant" tabindex="0" role="button" aria-label="Цех">
+        <rect class="halo" x="256" y="140" width="230" height="246" rx="18" fill="#ffb347" filter="url(#hGlow)"/>
+        <rect x="270" y="262" width="200" height="110" fill="#5d6f80"/>
+        <path d="M270 262 L310 226 L310 262 L350 226 L350 262 L390 226 L390 262 L430 226 L430 262 L470 226 L470 262 Z" fill="#3d4248"/>
+        <g fill="#9fd3e6" opacity="0.8"><path d="M312 258 L312 236 L336 258 Z"/><path d="M352 258 L352 236 L376 258 Z"/><path d="M392 258 L392 236 L416 258 Z"/><path d="M432 258 L432 236 L456 258 Z"/></g>
+        <rect x="298" y="316" width="46" height="56" fill="#2b2e33"/><rect x="360" y="316" width="46" height="56" fill="#2b2e33"/>
+        <rect x="418" y="300" width="44" height="8" fill="#d9b43a"/><rect x="454" y="300" width="8" height="72" fill="#d9b43a"/>
+        <rect x="440" y="152" width="20" height="110" fill="#8a4b3b"/><rect x="440" y="174" width="20" height="8" fill="#f1efe6"/>
+        <g fill="#d9d4e4">
+          <circle cx="450" cy="140" r="8" opacity="0.6"><animate attributeName="cy" values="146;96" dur="3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.6;0" dur="3s" repeatCount="indefinite"/></circle>
+          <circle cx="456" cy="140" r="11" opacity="0.5"><animate attributeName="cy" values="146;90" dur="3.6s" begin="1s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.5;0" dur="3.6s" begin="1s" repeatCount="indefinite"/></circle>
+          <circle cx="446" cy="140" r="14" opacity="0.4"><animate attributeName="cy" values="146;84" dur="4.2s" begin="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.4;0" dur="4.2s" begin="2s" repeatCount="indefinite"/></circle>
+        </g>
+        <text class="name" x="370" y="458">Цех</text>
+        <text class="lvl" x="370" y="478" id="lvlPlant">● ○ ○</text>
+        <text class="note" x="370" y="500" id="notePlant"></text>
+      </g>
+      <g class="room" data-room="store" tabindex="0" role="button" aria-label="Склад">
+        <rect class="halo" x="506" y="266" width="208" height="120" rx="18" fill="#ffb347" filter="url(#hGlow)"/>
+        <rect x="520" y="356" width="180" height="16" fill="#5e626f"/>
+        <g fill="#3d4248"><rect x="536" y="350" width="36" height="8"/><rect x="596" y="350" width="36" height="8"/><rect x="656" y="350" width="36" height="8"/><rect x="566" y="318" width="36" height="8"/><rect x="626" y="318" width="36" height="8"/></g>
+        <g stroke="#2b2e33" stroke-width="2">
+          <rect id="hubTank1" x="526" y="324" width="56" height="28" rx="14" fill="#5a5f6a"/><rect id="hubTank2" x="586" y="324" width="56" height="28" rx="14" fill="#5a5f6a"/><rect id="hubTank3" x="646" y="324" width="56" height="28" rx="14" fill="#5a5f6a"/>
+          <rect id="hubTank4" x="556" y="292" width="56" height="28" rx="14" fill="#5a5f6a"/><rect id="hubTank5" x="616" y="292" width="56" height="28" rx="14" fill="#5a5f6a"/>
+        </g>
+        <rect x="506" y="364" width="14" height="8" fill="#d9b43a"/>
+        <text class="name" x="610" y="458">Склад</text>
+        <text class="lvl" x="610" y="478" id="lvlStore">● ○ ○</text>
+        <text class="note" x="610" y="500" id="noteStore"></text>
+      </g>
+      <g class="room" data-room="dock" tabindex="0" role="button" aria-label="Док">
+        <rect class="halo" x="734" y="150" width="250" height="236" rx="18" fill="#ffb347" filter="url(#hGlow)"/>
+        <rect x="744" y="172" width="214" height="10" fill="#d9822b"/><rect x="930" y="182" width="24" height="16" fill="#3d4248"/>
+        <rect x="800" y="160" width="14" height="212" fill="#d9822b"/><rect x="786" y="196" width="42" height="26" fill="#d9822b"/><rect x="792" y="202" width="14" height="12" fill="#1d4b66"/>
+        <line x1="772" y1="182" x2="772" y2="296" stroke="#2b2b2b" stroke-width="2"/><rect x="765" y="296" width="14" height="10" fill="#3d4248"/>
+        <g id="hubShip" transform="translate(760,360)">
+          <path id="hubHull" d="M0 22 L10 40 L204 40 L228 22 Z" fill="#b83d2a"/>
+          <path d="M4 32 L8 40 L204 40 L218 32 Z" fill="#17171b"/>
+          <rect x="0" y="20" width="228" height="3" fill="#4e6358"/>
+          <rect x="18" y="0" width="36" height="22" fill="#f1efe6"/><rect x="22" y="-10" width="28" height="12" fill="#f1efe6"/><rect x="22" y="-8" width="28" height="5" fill="#1d4b66"/>
+          <rect x="8" y="-4" width="10" height="20" fill="#2b2e33"/><rect x="8" y="2" width="10" height="4" fill="#c0432f"/>
+          <g id="hubTanks" fill="#f2f3f1" stroke="#c0432f" stroke-width="2"><ellipse cx="90" cy="12" rx="19" ry="9"/><ellipse cx="134" cy="12" rx="19" ry="9"/><ellipse cx="178" cy="12" rx="19" ry="9"/></g>
+          <circle cx="226" cy="18" r="3" fill="#4aff7a"/><circle cx="2" cy="18" r="3" fill="#ff4a3a"/>
+        </g>
+        <text class="name" x="860" y="458">Док</text>
+        <text class="lvl" x="860" y="478" id="lvlDock">● ○ ○</text>
+        <text class="note" x="860" y="500" id="noteDock"></text>
+      </g>
+    </svg>
+    <div class="hub-foot" id="hubFoot"></div>
+    <div id="hubPanel" hidden></div>
+  </div>
+</div>
+<script src="vendor/three.r128.min.js"></script>
+<script src="online.js"></script>
+<script>
+(function () {
+  'use strict';
+  // Онлайн-слой (таблица лидеров, отзывы) из online.js; без него игра работает как раньше.
+  var Online = window.Online || { panel: function () {}, report: function () {}, feedbackLink: function () { return ''; } };
+  if (!window.THREE) { document.getElementById('overlay').innerHTML = '<div class="card"><h2>Нет связи</h2><p>Не удалось загрузить Three.js. Проверьте интернет и обновите страницу.</p></div>'; return; }
+
+  // ---------- constants ----------
+  var STEP = 4;                 // metres between course samples
+  var SHIP_LEN = 30, SHIP_HALF_W = 4.5;
+  var SHIP_PTS = [13, 0, -12];  // collision probes along the keel (metres from centre)
+  var PROBE_R = 4.2;
+  var SPTS = SHIP_PTS, PR = PROBE_R;   // the active tanker's probes, scaled in applyTanker
+  var CRUISE = 23, BOOST = 33;  // m/s
+  var LANE = 0.45;                // traffic lanes sit at +-LANE * half width
+  var BOAT_HALF = 2.6;
+  var DOCK_SPEED = 1.6, DOCK_DIST = 14, DOCK_ANGLE = 22 * Math.PI / 180, DOCK_HOLD = 1.0;
+  var TAU = Math.PI * 2;
+
+  // ---------- helpers ----------
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function smooth(t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }
+  function angDiff(a, b) { var d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; }
+  function rng(seed) {
+    var s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      var t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function fmt(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  function fmtTime(t) { var m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + (s < 10 ? '0' : '') + s; }
+  function smoothNoise(rand, n, period, lo, hi) { // value noise sampled every `period` steps
+    var knots = [], out = [], k = Math.ceil(n / period) + 2, i;
+    for (i = 0; i < k; i++) knots.push(lo + rand() * (hi - lo));
+    for (i = 0; i < n; i++) { var p = i / period, j = Math.floor(p); out.push(lerp(knots[j], knots[j + 1], smooth(p - j))); }
+    return out;
+  }
+
+  // ---------- game state ----------
+  var G = { mode: 'title', room: null, money: 0, earned: 0, done: 0, xp: 0, rank: 1, yard: null, fleet: null, tanker: 'megalul', tune: null, boardSeed: 1, board: null, job: null, stock: 0, prodAt: 0, lastOutcome: 'docked', runSeed: (Date.now() % 100000) | 0, t: 0, time: 0, timeLeft: 0, late: false, cargo: 100, drift: 0, driftRun: 0, boost: 0, boosting: false, nearMiss: 0, pickupCash: 0, holdT: 0, hitCool: 0, shake: 0, theme: null };
+  var keys = { left: false, right: false, up: false, down: false };
+  var C = null;    // current course
+  var S = null;    // ship state
+
+  // ---------- course generation ----------
+  function buildCourse(job) { // the contract sets the difficulty and length, its region the width, relief, traffic and look
+    var level = job.diff, R = ROUTE[job.region];
+    var rand = rng(job.seed * 31 + level * 7919);
+    var runLen = Math.round((900 + 260 * level) * job.lenK);   // metres of winding channel before the harbour basin
+    var basinLen = 170;
+    var total = runLen + basinLen;
+    var n = Math.ceil(total / STEP) + 1;
+    var minHalf = Math.max(15, (34 - level * 1.8) * R.width), maxHalf = minHalf + 16 * R.width;
+    var maxCurv = Math.min(1 / 55, (0.55 + level * 0.09) / 100);  // 1/m
+    var px = new Float32Array(n), pz = new Float32Array(n), pa = new Float32Array(n), hw = new Float32Array(n);
+    var noise = smoothNoise(rand, n, 9, 0.55, 1.45);
+    var widthNoise = smoothNoise(rand, n, 14, 0, 1);
+    var x = 0, z = 0, a = 0, curv = 0, target = 0, segLeft = 0;
+    for (var i = 0; i < n; i++) {
+      var s = i * STEP;
+      px[i] = x; pz[i] = z; pa[i] = a;
+      var inBasin = s > runLen;
+      var basinT = inBasin ? smooth((s - runLen) / 60) : 0;
+      hw[i] = lerp(lerp(minHalf, maxHalf, widthNoise[i]), 48, basinT);
+      if (segLeft <= 0) {
+        segLeft = 50 + rand() * 120;
+        target = (rand() * 2 - 1) * maxCurv;
+        if (a > 0.9) target = -Math.abs(target);  // keep the fjord heading roughly east so it never folds over itself
+        if (a < -0.9) target = Math.abs(target);
+      }
+      segLeft -= STEP;
+      var ease = s > runLen - 80 ? 1 - smooth((s - (runLen - 80)) / 80) : 1;
+      curv = lerp(curv, target * ease, 0.08);
+      if (inBasin) curv = 0;
+      a += curv * STEP;
+      x += Math.cos(a) * STEP; z += Math.sin(a) * STEP;
+    }
+    var curvArr = new Float32Array(n), kmax = new Float32Array(n);
+    for (i = 0; i < n; i++) { var i0 = Math.max(0, i - 2), i1 = Math.min(n - 1, i + 2); curvArr[i] = angDiff(pa[i1], pa[i0]) / (STEP * (i1 - i0)); }
+    for (i = 0; i < n; i++) { var mx = 0; for (var j = Math.max(0, i - 8); j <= Math.min(n - 1, i + 8); j++) mx = Math.max(mx, Math.abs(curvArr[j])); kmax[i] = mx; }
+    var c = { n: n, px: px, pz: pz, pa: pa, hw: hw, curv: curvArr, kmax: kmax, total: total, runLen: runLen, noise: noise, relief: R.relief, rocks: [], buoys: [], trees: [], pickups: [], traffic: [], bridge: null };
+    // a bridge spans the widest stretch of the middle third from level 2 on; its pylons narrow the fairway
+    if (job.bridge) {
+      var bi = 0, bw = 0;
+      for (i = Math.floor(runLen * 0.35 / STEP); i < Math.floor(runLen * 0.7 / STEP); i++) if (hw[i] > bw) { bw = hw[i]; bi = i; }
+      var pyl = [atIdx(c, bi, hw[bi] * 0.72), atIdx(c, bi, -hw[bi] * 0.72)];
+      c.bridge = { i: bi, s: bi * STEP, hw: hw[bi], pylons: [{ x: pyl[0].x, z: pyl[0].z, r: 3 }, { x: pyl[1].x, z: pyl[1].z, r: 3 }] };
+    }
+    // lanes: oncoming boats keep to our left (negative offsets), slow barges crawl along our right; rocks never sit in a lane
+    function inLane(off, r, hwi) { var lo = LANE * hwi - BOAT_HALF - 1.5, hi = LANE * hwi + BOAT_HALF + 1.5; var a0 = Math.abs(off) - r, a1 = Math.abs(off) + r; return a1 > lo && a0 < hi; }
+    var rockCount = Math.round((level + 2) * runLen / 1000) + 2, tries = 0;
+    while (c.rocks.length < rockCount && tries < 600) {
+      tries++;
+      var ri = 30 + Math.floor(rand() * (runLen / STEP - 60));
+      if (c.bridge && Math.abs(ri - c.bridge.i) * STEP < 50) continue;
+      var side = rand() < 0.5 ? -1 : 1;
+      var off = side * hw[ri] * (rand() * 0.86);
+      var rr = 2.4 + rand() * 2.6;
+      if (inLane(off, rr, hw[ri])) continue;
+      if (Math.abs(off) + rr > hw[ri] - 1) continue;
+      var p = atIdx(c, ri, off), ok = true;
+      for (var k = 0; k < c.rocks.length; k++) { var o = c.rocks[k]; if ((o.x - p.x) * (o.x - p.x) + (o.z - p.z) * (o.z - p.z) < 34 * 34) { ok = false; break; } }
+      if (ok) c.rocks.push({ x: p.x, z: p.z, r: rr, rot: rand() * TAU });
+    }
+    // pickups: cash barrels mostly, a repair kit now and then; the juicy ones hug the inside of bends
+    var pickCount = 7 + level, pt = 0;
+    while (c.pickups.length < pickCount && pt < 600) {
+      pt++;
+      var pi = 40 + Math.floor(rand() * (runLen / STEP - 80));
+      if (c.bridge && Math.abs(pi - c.bridge.i) * STEP < 30) continue;
+      var curvSign = pa[Math.min(n - 1, pi + 6)] - pa[Math.max(0, pi - 6)];
+      var inner = curvSign > 0 ? 1 : -1;           // heading grows when turning right, so the inside of the bend is to starboard
+      var poff = rand() < 0.5 ? (rand() * 2 - 1) * (LANE * hw[pi] - BOAT_HALF - 4) : inner * hw[pi] * (0.72 + rand() * 0.14);
+      if (inLane(poff, 1.5, hw[pi])) continue;
+      var pp = atIdx(c, pi, poff), okp = true;
+      for (k = 0; k < c.rocks.length; k++) { var ro = c.rocks[k]; if ((ro.x - pp.x) * (ro.x - pp.x) + (ro.z - pp.z) * (ro.z - pp.z) < (ro.r + 6) * (ro.r + 6)) { okp = false; break; } }
+      for (k = 0; k < c.pickups.length && okp; k++) { var pk = c.pickups[k]; if ((pk.x - pp.x) * (pk.x - pp.x) + (pk.z - pp.z) * (pk.z - pp.z) < 30 * 30) okp = false; }
+      if (okp) c.pickups.push({ x: pp.x, z: pp.z, kind: rand() < 0.18 ? 'repair' : 'cash', taken: false, phase: rand() * TAU });
+    }
+    // traffic
+    var boats = Math.min(Math.round((2 + level) * R.traffic), 10);
+    for (i = 0; i < boats; i++) {
+      var oncoming = i % 2 === 1;
+      var frac = (i + 1) / (boats + 1);
+      c.traffic.push({ s: 260 + frac * (runLen - 420), off: (oncoming ? -1 : 1) * LANE, dir: oncoming ? -1 : 1, speed: oncoming ? 7 + rand() * 2.5 : 4.5 + rand() * 2, kind: oncoming ? 'fisher' : 'barge', x: 0, z: 0, a: 0, horn: 0, nm: false });
+    }
+    for (i = 6; i < n - 2; i += 10) {
+      var pl = atIdx(c, i, hw[i] - 2.5), pr = atIdx(c, i, -hw[i] + 2.5);
+      c.buoys.push({ x: pl.x, z: pl.z, left: false }); c.buoys.push({ x: pr.x, z: pr.z, left: true });
+    }
+    for (i = 0; i < n; i += 2) {
+      for (var sd = -1; sd <= 1; sd += 2) {
+        if (rand() < 0.55 * R.trees) {
+          var d = 7 + rand() * 70;
+          if (harbourFlat(c, i, sd, d)) continue;
+          var tp = atIdx(c, i, sd * (hw[i] + insideSafe(c, i, sd, d)));
+          var ti = terrainInfo(c, tp.x, tp.z); if (ti.dist < c.hw[ti.i] + 3) continue;   // landed in someone else's water
+          var h = bankHeight(c, i, d);
+          if (h < 34) c.trees.push({ x: tp.x, z: tp.z, y: h, s: 0.7 + rand() * 0.8, tint: rand() });
+        }
+      }
+    }
+    // harbour: a quay along the left bank of the basin and a berth beside it
+    var dockI = Math.floor((total - 85) / STEP);
+    c.dockI = dockI; c.dockS = dockI * STEP;
+    var dp = atIdx(c, dockI, hw[dockI] - 9);
+    c.dock = { x: dp.x, z: dp.z, a: pa[dockI] };
+    c.quay = { i: dockI, off: hw[dockI] + 4, len: 130 };
+    var sp = atIdx(c, 8, 0);
+    c.start = { x: sp.x, z: sp.z, a: pa[8] };
+    return c;
+  }
+  function atS(c, s, off) { // same, but for a distance along the course (interpolated)
+    var f = clamp(s / STEP, 0, c.n - 1.001), i = Math.floor(f), t = f - i;
+    var p0 = atIdx(c, i, off), p1 = atIdx(c, i + 1, off);
+    return { x: lerp(p0.x, p1.x, t), z: lerp(p0.z, p1.z, t), a: c.pa[i] + angDiff(c.pa[i + 1], c.pa[i]) * t, hw: lerp(c.hw[i], c.hw[i + 1], t) };
+  }
+  function atIdx(c, i, off) { // point `off` metres to starboard (the visual right) of sample i
+    i = clamp(i, 0, c.n - 1);
+    var a = c.pa[i];
+    return { x: c.px[i] - Math.sin(a) * off, z: c.pz[i] + Math.cos(a) * off, a: a };
+  }
+  function insideSafe(c, i, side, d) { // on the inside of a bend an offset saturates short of the centre of curvature, so terrain never folds over the fairway
+    var kap = c.curv[i]; if (side * kap <= 0) return d;
+    var Rm = Math.max(8, 0.8 / Math.max(c.kmax[i], 1e-4) - c.hw[i]);   // tightest bend within 32 m decides
+    return Rm * (1 - Math.exp(-d / Rm));
+  }
+  function harbourFlat(c, i, side, d) { return side === 1 && i * STEP > c.runLen - 30 && d < 95; } // level ground for the port on the left bank of the basin
+  function bankHeight(c, i, d) { // slope profile d metres beyond the water's edge
+    var k = c.noise[clamp(i, 0, c.n - 1)];
+    return Math.min(70, (0.4 + 0.22 * d + 0.0028 * d * d) * k * (c.relief || 1));
+  }
+  function nearest(c, x, z, hint) { // closest course sample near `hint`; returns index, lateral offset (left positive) and distance along
+    var lo = clamp(hint - 25, 0, c.n - 1), hi = clamp(hint + 50, 0, c.n - 1), best = lo, bd = Infinity;
+    for (var i = lo; i <= hi; i++) { var dx = x - c.px[i], dz = z - c.pz[i], dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = i; } }
+    var a = c.pa[best];
+    var off = -(x - c.px[best]) * Math.sin(a) + (z - c.pz[best]) * Math.cos(a);
+    var along = (x - c.px[best]) * Math.cos(a) + (z - c.pz[best]) * Math.sin(a);
+    return { i: best, off: off, s: best * STEP + along, hw: c.hw[best], a: a };
+  }
+  // ---------- scene ----------
+  var canvas = document.getElementById('game');
+  var renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: location.hash === '#autotest' }); }
+  catch (err) { document.getElementById('overlay').innerHTML = '<div class="card"><h2>Нет WebGL</h2><p>Браузер не смог создать 3D-контекст. Попробуйте другой браузер.</p></div>'; return; }
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  var scene = new THREE.Scene();
+  var FOG_COLOR = 0xb87c8a;
+  scene.fog = new THREE.Fog(FOG_COLOR, 160, 620);
+  var camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.5, 1500);
+
+  var sky = new THREE.Mesh(new THREE.SphereGeometry(900, 24, 12), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color(0x2a2448) }, mid: { value: new THREE.Color(0xc96a7f) }, bot: { value: new THREE.Color(0xf2b88c) } },
+    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 bot; varying vec3 vP;' +
+      'void main(){ float h = normalize(vP).y; vec3 c = mix(bot, mid, smoothstep(0.0, 0.10, h)); c = mix(c, top, smoothstep(0.08, 0.45, h)); if (h < 0.0) c = bot; gl_FragColor = vec4(c, 1.0); }'
+  }));
+  scene.add(sky);
+
+  var hemi = new THREE.HemisphereLight(0xd9a0b0, 0x24322f, 0.65);
+  scene.add(hemi);
+  var sun = new THREE.DirectionalLight(0xffb27a, 1.15);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 20; sun.shadow.camera.far = 420;
+  sun.shadow.camera.left = -80; sun.shadow.camera.right = 80; sun.shadow.camera.top = 80; sun.shadow.camera.bottom = -80;
+  sun.shadow.bias = -0.0008;
+  scene.add(sun); scene.add(sun.target);
+
+  var world = null, dockMarker = null, dockFrame = null, buoyMat = null;
+  // time of day cycles with the contract number
+  var THEMES = [
+    { name: 'закат', top: 0x2a2448, mid: 0xc96a7f, bot: 0xf2b88c, fog: 0xb87c8a, near: 160, far: 620, hemiSky: 0xd9a0b0, hemiGround: 0x24322f, hemiI: 0.65, sunC: 0xffb27a, sunI: 1.15, water: 0x1c5467, night: false },
+    { name: 'ночь', top: 0x05070f, mid: 0x151c3a, bot: 0x2c2748, fog: 0x161a30, near: 70, far: 360, hemiSky: 0x3a4878, hemiGround: 0x0b1014, hemiI: 0.6, sunC: 0x9fb4ff, sunI: 0.5, water: 0x0a2232, night: true },
+    { name: 'рассвет', top: 0x3a4f8a, mid: 0xe3907e, bot: 0xffdca6, fog: 0xd9a692, near: 150, far: 580, hemiSky: 0xf2cdb4, hemiGround: 0x2a3530, hemiI: 0.72, sunC: 0xffd6a6, sunI: 1.2, water: 0x286878, night: false }
+  ];
+  function applyTheme(th) {
+    G.theme = th;
+    sky.material.uniforms.top.value.setHex(th.top); sky.material.uniforms.mid.value.setHex(th.mid); sky.material.uniforms.bot.value.setHex(th.bot);
+    scene.fog.color.setHex(th.fog); scene.fog.near = th.near; scene.fog.far = th.far;
+    hemi.color.setHex(th.hemiSky); hemi.groundColor.setHex(th.hemiGround); hemi.intensity = th.hemiI;
+    sun.color.setHex(th.sunC); sun.intensity = th.sunI;
+    COL.water.setHex(th.water);
+    if (headlight) headlight.intensity = th.night ? 2.4 : 0;
+    setShipNight(th.night);
+  }
+
+  function pushV(arr, x, y, z) { arr.push(x, y, z); }
+  function pushC(arr, c) { arr.push(c.r, c.g, c.b); }
+  var COL = {
+    sand: new THREE.Color(0xc9b17f), grass: new THREE.Color(0x4e7b48), pine: new THREE.Color(0x2c5240), rock: new THREE.Color(0x5e626f), peak: new THREE.Color(0x7c7f8d),
+    water: new THREE.Color(0x1c5467), foamLine: new THREE.Color(0xcfe6ea)
+  };
+  // the banks of each region: the palette the slopes are coloured with, plus a tint for the water
+  var LANDS = {
+    fjord: { sand: 0xc9b17f, grass: 0x4e7b48, pine: 0x2c5240, rock: 0x5e626f, peak: 0x7c7f8d },
+    river: { sand: 0xcdbb8a, grass: 0x6a8f3e, pine: 0x3d6b3a, rock: 0x6b6a5e, peak: 0x8a877a, water: 0x3f7a6a },
+    tropic: { sand: 0xe8d9a8, grass: 0x58a046, pine: 0x2f7a3c, rock: 0x6e7a5a, peak: 0x8c9a7c, water: 0x1f8a8f },
+    desert: { sand: 0xe3c98e, grass: 0xd2b273, pine: 0xb9955a, rock: 0x9c7d52, peak: 0xb79b6c, water: 0x1f6f86 },
+    city: { sand: 0xb8b2a4, grass: 0x6f7d5a, pine: 0x56634a, rock: 0x7a7570, peak: 0x9a948c, water: 0x1f4f72 },
+    steppe: { sand: 0xd8c08a, grass: 0xa9a35c, pine: 0x7d8a4a, rock: 0x8d7f5c, peak: 0xa39a7e, water: 0x4a6e5a },
+    volga: { sand: 0xd0bd8c, grass: 0x6f9a4c, pine: 0x4a7a42, rock: 0x6f6d62, peak: 0x8e8b7f, water: 0x3a6d7a }
+  };
+  function applyLand(key) { var L = LANDS[key] || LANDS.fjord; COL.sand.setHex(L.sand); COL.grass.setHex(L.grass); COL.pine.setHex(L.pine); COL.rock.setHex(L.rock); COL.peak.setHex(L.peak); return L; }
+  function slopeColor(d, h, j) {
+    var c = d < 1.5 ? COL.sand : h < 3.5 ? COL.grass : h < 15 ? COL.pine : h < 32 ? COL.rock : COL.peak;
+    return c.clone().offsetHSL(0, 0, (j - 0.5) * 0.06);
+  }
+
+  function buildWorld(c) {
+    if (world) { scene.remove(world); world.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); }
+    world = new THREE.Group(); scene.add(world);
+    var L = applyLand(ROUTE[G.job.region].land); applyTheme(THEMES[G.job.theme]);
+    if (L.water) COL.water.lerp(new THREE.Color(L.water), 0.55);
+    var rand = rng(G.job.seed + 101);
+    var i, k, side;
+    // water: one strip down the middle, plus a pale foam line hugging each bank
+    var wpos = [], fpos = [];
+    for (i = 0; i < c.n - 1; i++) {
+      var l0 = atIdx(c, i, c.hw[i] + 0.5), r0 = atIdx(c, i, -c.hw[i] - 0.5), l1 = atIdx(c, i + 1, c.hw[i + 1] + 0.5), r1 = atIdx(c, i + 1, -c.hw[i + 1] - 0.5);
+      pushV(wpos, l0.x, 0, l0.z); pushV(wpos, r0.x, 0, r0.z); pushV(wpos, r1.x, 0, r1.z);
+      pushV(wpos, l0.x, 0, l0.z); pushV(wpos, r1.x, 0, r1.z); pushV(wpos, l1.x, 0, l1.z);
+      for (side = -1; side <= 1; side += 2) {
+        var a0 = atIdx(c, i, side * (c.hw[i] - 1.6)), b0 = atIdx(c, i, side * (c.hw[i] + 0.2)), a1 = atIdx(c, i + 1, side * (c.hw[i + 1] - 1.6)), b1 = atIdx(c, i + 1, side * (c.hw[i + 1] + 0.2));
+        pushV(fpos, a0.x, 0.04, a0.z); pushV(fpos, b0.x, 0.04, b0.z); pushV(fpos, b1.x, 0.04, b1.z);
+        pushV(fpos, a0.x, 0.04, a0.z); pushV(fpos, b1.x, 0.04, b1.z); pushV(fpos, a1.x, 0.04, a1.z);
+      }
+    }
+    var wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3)); wg.computeVertexNormals();
+    var water = new THREE.Mesh(wg, new THREE.MeshLambertMaterial({ color: COL.water, side: THREE.DoubleSide })); water.receiveShadow = true; world.add(water);
+    var fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(fpos, 3)); fg.computeVertexNormals();
+    world.add(new THREE.Mesh(fg, new THREE.MeshLambertMaterial({ color: COL.foamLine, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })));
+    // banks: faceted slopes, coloured by height
+    var rings = [0, 5, 14, 28, 45, 65, 85, 110];   // offsets pass through insideSafe, so the inside of a bend compresses into a steep slope instead of folding
+    var bpos = [], bcol = [];
+    var jit = function (i, k) { return 0.85 + 0.27 * (((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1); };
+    function ringOffset(i, side, d) { // fold-proof offset, then checked against the whole fairway and pulled in while it still lands in water
+      var de = insideSafe(c, i, side, d);
+      for (var tries = 0; tries < 8 && de > 0.5; tries++) {
+        var p = atIdx(c, i, side * (c.hw[i] + de)), t = terrainInfo(c, p.x, p.z);
+        if (t.dist >= c.hw[t.i] + Math.min(2, de * 0.5)) break;
+        de *= 0.6;
+      }
+      return de;
+    }
+    function vert(i, k, side) {
+      var d = rings[k], h = k === 0 ? 0.3 : harbourFlat(c, i, side, d) ? 1.0 : bankHeight(c, i, d) * jit(i, k);
+      var p = atIdx(c, i, side * (c.hw[i] + ringOffset(i, side, d)));
+      return { x: p.x, y: h, z: p.z, d: d, h: h };
+    }
+    for (side = -1; side <= 1; side += 2) {
+      for (i = 0; i < c.n - 1; i++) {
+        for (k = 0; k < rings.length - 1; k++) {
+          var A = vert(i, k, side), B = vert(i + 1, k, side), Cc = vert(i + 1, k + 1, side), D = vert(i, k + 1, side);
+          var col = slopeColor(rings[k], (A.h + B.h + Cc.h + D.h) / 4, jit(i, k + 7) - 0.85);
+          pushV(bpos, A.x, A.y, A.z); pushV(bpos, B.x, B.y, B.z); pushV(bpos, Cc.x, Cc.y, Cc.z);
+          pushV(bpos, A.x, A.y, A.z); pushV(bpos, Cc.x, Cc.y, Cc.z); pushV(bpos, D.x, D.y, D.z);
+          for (var q = 0; q < 6; q++) pushC(bcol, col);
+        }
+      }
+    }
+    var bg = new THREE.BufferGeometry();
+    bg.setAttribute('position', new THREE.Float32BufferAttribute(bpos, 3)); bg.setAttribute('color', new THREE.Float32BufferAttribute(bcol, 3)); bg.computeVertexNormals();
+    var banks = new THREE.Mesh(bg, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })); banks.receiveShadow = true; world.add(banks);
+    buildHeightfield(c, world);
+    // caps closing both ends of the fjord
+    var capMat = new THREE.MeshLambertMaterial({ color: COL.rock });
+    [{ i: 0, dir: -1 }, { i: c.n - 1, dir: 1 }].forEach(function (e) {
+      var p = atIdx(c, e.i, 0), a = c.pa[e.i];
+      var cap = new THREE.Mesh(new THREE.BoxGeometry(70, 46, c.hw[e.i] * 2 + 420), capMat);
+      cap.position.set(p.x + Math.cos(a) * e.dir * 36, 10, p.z + Math.sin(a) * e.dir * 36); cap.rotation.y = -a; world.add(cap);
+    });
+    // trees
+    var tg = new THREE.ConeGeometry(2.6, 9, 6); tg.translate(0, 4.5, 0);
+    var trees = new THREE.InstancedMesh(tg, new THREE.MeshLambertMaterial({ color: 0xffffff }), c.trees.length);
+    var m = new THREE.Matrix4(), tcol = new THREE.Color(), tints = [0x1f4a38, 0x2d5e44, 0x3a6a46, 0x244538];
+    for (i = 0; i < c.trees.length; i++) {
+      var t = c.trees[i], ty = t.y;
+      if (ty > 34) { m.makeScale(0.001, 0.001, 0.001); m.setPosition(t.x, -50, t.z); trees.setMatrixAt(i, m); continue; }   // above the tree line
+      m.makeScale(t.s, t.s, t.s); m.setPosition(t.x, ty - 0.6, t.z); trees.setMatrixAt(i, m);
+      trees.setColorAt(i, tcol.setHex(tints[Math.floor(t.tint * tints.length)]));
+    }
+    trees.castShadow = true; trees.frustumCulled = false; world.add(trees);
+    // rocks in the water
+    if (c.rocks.length) {
+      var rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0x6a6872 }), c.rocks.length);
+      var e = new THREE.Euler();
+      for (i = 0; i < c.rocks.length; i++) {
+        var r = c.rocks[i];
+        m.makeRotationFromEuler(e.set(rand() * 0.6, r.rot, rand() * 0.6)); m.scale(new THREE.Vector3(r.r, r.r * 0.8, r.r)); m.setPosition(r.x, r.r * 0.15, r.z);
+        rocks.setMatrixAt(i, m);
+      }
+      rocks.castShadow = true; rocks.frustumCulled = false; world.add(rocks);
+    }
+    // channel buoys: red to port, green to starboard
+    var bgeo = new THREE.SphereGeometry(0.7, 8, 6);
+    buoyMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: G.theme.night ? 0x707070 : 0x222222 });
+    var buoys = new THREE.InstancedMesh(bgeo, buoyMat, c.buoys.length);
+    for (i = 0; i < c.buoys.length; i++) {
+      var b = c.buoys[i]; m.identity(); m.setPosition(b.x, 0.5, b.z); buoys.setMatrixAt(i, m);
+      buoys.setColorAt(i, tcol.setHex(b.left ? 0xe24b3b : 0x3fc46a));
+    }
+    buoys.frustumCulled = false; world.add(buoys);
+    if (c.bridge) buildBridge(c, world);
+    buildPickups(c, world, rand);
+    buildTraffic(c, world, rand);
+    buildHarbour(c, world);
+  }
+
+  // ---------- land beyond the shore: a height field over the course, so slopes never fold on tight bends ----------
+  function terrainInfo(c, x, z) { // nearest course sample: coarse sweep, then a local refinement
+    var best = 0, bd = Infinity, i, dx, dz, dd;
+    for (i = 0; i < c.n; i += 6) { dx = x - c.px[i]; dz = z - c.pz[i]; dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = i; } }
+    var lo = Math.max(0, best - 6), hi = Math.min(c.n - 1, best + 6);
+    for (i = lo; i <= hi; i++) { dx = x - c.px[i]; dz = z - c.pz[i]; dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = i; } }
+    var a = c.pa[best];
+    return { i: best, dist: Math.sqrt(bd), off: -(x - c.px[best]) * Math.sin(a) + (z - c.pz[best]) * Math.cos(a) };
+  }
+  function landHeight(c, x, z) {
+    var t = terrainInfo(c, x, z), d = t.dist - c.hw[t.i];
+    if (d < 40) return -3;                                   // the rings own everything near the water
+    var f = lerp(0.84, 1, smooth((d - 100) / 30));               // stays under the rings where they overlap, full height beyond them
+    return lerp(-3, bankHeight(c, t.i, d) * f, smooth((d - 40) / 30));
+  }
+  function buildHeightfield(c, parent) {
+    var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, i, k;
+    for (i = 0; i < c.n; i++) { if (c.px[i] < minX) minX = c.px[i]; if (c.px[i] > maxX) maxX = c.px[i]; if (c.pz[i] < minZ) minZ = c.pz[i]; if (c.pz[i] > maxZ) maxZ = c.pz[i]; }
+    var M = 280, cell = clamp(10 + (c.total - 1300) / 400, 10, 16);
+    minX -= M; maxX += M; minZ -= M; maxZ += M;
+    var nx = Math.ceil((maxX - minX) / cell) + 1, nz = Math.ceil((maxZ - minZ) / cell) + 1;
+    var xs = new Float32Array(nx * nz), zs = new Float32Array(nx * nz), hs = new Float32Array(nx * nz);
+    var r = rng(G.job.seed * 13 + 29 + 5);
+    for (var iz = 0; iz < nz; iz++) for (var ix = 0; ix < nx; ix++) {
+      k = iz * nx + ix;
+      var x = minX + ix * cell + (r() - 0.5) * cell * 0.4, z = minZ + iz * cell + (r() - 0.5) * cell * 0.4;
+      var h = landHeight(c, x, z); if (h > 0) h *= 0.88 + r() * 0.24;
+      xs[k] = x; zs[k] = z; hs[k] = h;
+    }
+    var pos = [], col = [];
+    function tri(a, b, d2) {
+      var h = (hs[a] + hs[b] + hs[d2]) / 3, cc = slopeColor(20, h, r());
+      pos.push(xs[a], hs[a], zs[a], xs[b], hs[b], zs[b], xs[d2], hs[d2], zs[d2]);
+      for (var q = 0; q < 3; q++) col.push(cc.r, cc.g, cc.b);
+    }
+    for (iz = 0; iz < nz - 1; iz++) for (ix = 0; ix < nx - 1; ix++) {
+      var a = iz * nx + ix, b = a + 1, c2 = a + nx, d2 = c2 + 1;
+      if (hs[a] < -1 && hs[b] < -1 && hs[c2] < -1 && hs[d2] < -1) continue;   // open water: nothing to draw under the fairway
+      tri(a, c2, b); tri(b, c2, d2);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
+    var land = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })); land.receiveShadow = true; parent.add(land);
+  }
+
+  function buildHarbour(c, parent) {
+    var q = c.quay, a = c.pa[q.i];
+    var g = new THREE.Group(); var p = atIdx(c, q.i, 0); g.position.set(p.x, 0, p.z); g.rotation.y = -a; parent.add(g);
+    // inside g: +x runs along the fjord, +z is the left bank (port side)
+    var concrete = new THREE.MeshLambertMaterial({ color: 0x9aa0a6 }), dark = new THREE.MeshLambertMaterial({ color: 0x3d4248 });
+    var quay = new THREE.Mesh(new THREE.BoxGeometry(q.len, 2.6, 12), concrete); quay.position.set(0, 0.9, q.off); quay.castShadow = true; quay.receiveShadow = true; g.add(quay);
+    var apron = new THREE.Mesh(new THREE.BoxGeometry(q.len + 40, 2.2, 60), new THREE.MeshLambertMaterial({ color: 0x7d8389 })); apron.position.set(10, 0.6, q.off + 34); apron.receiveShadow = true; g.add(apron);
+    var i;
+    for (i = -2; i <= 2; i++) { // bollards and lamps along the edge
+      var bx = i * 26;
+      var bol = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.2, 8), dark); bol.position.set(bx, 2.8, q.off - 4.8); g.add(bol);
+      var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 8, 6), dark); pole.position.set(bx + 13, 6.2, q.off - 3.5); g.add(pole);
+      var lamp = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffd58a })); lamp.position.set(bx + 13, 10.3, q.off - 3.5); g.add(lamp);
+    }
+    var hues = [0x8a4b3b, 0x5d6f80, 0xb08a4a];
+    for (i = 0; i < 3; i++) {
+      var w = new THREE.Mesh(new THREE.BoxGeometry(24, 9, 14), new THREE.MeshLambertMaterial({ color: hues[i] }));
+      w.position.set(-36 + i * 36, 6.2, q.off + 22); w.castShadow = true; g.add(w);
+      var roof = new THREE.Mesh(new THREE.BoxGeometry(25, 1, 15), dark); roof.position.set(-36 + i * 36, 11.2, q.off + 22); g.add(roof);
+    }
+    var sign = new THREE.Mesh(new THREE.PlaneGeometry(16, 4), new THREE.MeshBasicMaterial({ map: makeLabel('ПОРТ', '#ffd58a', 'rgba(0,0,0,0)', 220), transparent: true }));
+    sign.position.set(0, 7, q.off + 14.9); sign.rotation.y = Math.PI; g.add(sign);
+    for (i = 0; i < 2; i++) { // two gantry cranes
+      var cx = -20 + i * 44;
+      var mast = new THREE.Mesh(new THREE.BoxGeometry(1.6, 16, 1.6), new THREE.MeshLambertMaterial({ color: 0xd9822b })); mast.position.set(cx, 10, q.off + 3); mast.castShadow = true; g.add(mast);
+      var boom = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 22), new THREE.MeshLambertMaterial({ color: 0xd9822b })); boom.position.set(cx, 17.5, q.off - 6); g.add(boom);
+      var cable = new THREE.Mesh(new THREE.BoxGeometry(0.15, 9, 0.15), dark); cable.position.set(cx, 12.5, q.off - 15); g.add(cable);
+    }
+    // berth marker beside the quay
+    dockMarker = new THREE.Mesh(new THREE.PlaneGeometry(SHIP_LEN + 12, SHIP_HALF_W * 2 + 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
+    dockMarker.rotation.x = -Math.PI / 2; dockMarker.position.set(0, 0.08, c.hw[q.i] - 9); g.add(dockMarker);
+    dockFrame = new THREE.LineSegments(new THREE.EdgesGeometry(dockMarker.geometry), new THREE.LineBasicMaterial({ color: 0xffffff }));
+    dockFrame.rotation.x = -Math.PI / 2; dockFrame.position.copy(dockMarker.position); dockFrame.position.y = 0.1; g.add(dockFrame);
+  }
+
+  function makeLabel(text, color, bg, size) {
+    var cv = document.createElement('canvas'); cv.width = 1024; cv.height = 256;
+    var x = cv.getContext('2d');
+    x.fillStyle = bg; x.fillRect(0, 0, cv.width, cv.height);
+    x.font = size + "px 'Russo One', 'Arial Black', Impact, sans-serif"; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.lineWidth = 14; x.strokeStyle = 'rgba(0,0,0,0.35)'; x.strokeText(text, 512, 136);
+    x.fillStyle = color; x.fillText(text, 512, 128);
+    var tex = new THREE.CanvasTexture(cv); tex.anisotropy = 4; return tex;
+  }
+
+  function buildBridge(c, parent) {
+    var b = c.bridge, p = atIdx(c, b.i, 0), a = c.pa[b.i];
+    var g = new THREE.Group(); g.position.set(p.x, 0, p.z); g.rotation.y = -a; parent.add(g);
+    var concrete = new THREE.MeshLambertMaterial({ color: 0x8e9398 }), steel = new THREE.MeshLambertMaterial({ color: 0x7a3f38 });
+    var span = b.hw * 2 + 110;
+    var deck = new THREE.Mesh(new THREE.BoxGeometry(9, 1.6, span), concrete); deck.position.set(0, 17, 0); deck.castShadow = true; g.add(deck);
+    for (var s = -1; s <= 1; s += 2) {
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.3, span), steel); rail.position.set(s * 4.4, 18.4, 0); g.add(rail);
+      var pylon = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.4, 18, 10), concrete); pylon.position.set(0, 8.4, s * b.hw * 0.72); pylon.castShadow = true; g.add(pylon);
+      var fender = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 1.2, 10), new THREE.MeshLambertMaterial({ color: 0x2b2b2b })); fender.position.set(0, 0.8, s * b.hw * 0.72); g.add(fender);
+      var stripe = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.05, 2.2, 10), new THREE.MeshLambertMaterial({ color: 0xf2b632 })); stripe.position.set(0, 3.2, s * b.hw * 0.72); g.add(stripe);
+    }
+    var truss = new THREE.Mesh(new THREE.BoxGeometry(1.6, 7, span * 0.55), steel); truss.position.set(0, 22, 0); g.add(truss);
+    var lampMat = new THREE.MeshBasicMaterial({ color: 0xffe6a8 });
+    for (var i = -3; i <= 3; i++) { var lamp = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), lampMat); lamp.position.set(-4.4, 19.6, i * span / 8); g.add(lamp); }
+  }
+
+  var pickupMeshes = [];
+  function buildPickups(c, parent, rand) {
+    pickupMeshes = [];
+    var cashMat = new THREE.MeshLambertMaterial({ color: 0xf2b632, emissive: 0x4a3608 });
+    var kitMat = new THREE.MeshLambertMaterial({ color: 0xf6f6f2, emissive: 0x333333 });
+    var redMat = new THREE.MeshLambertMaterial({ color: 0xe03b2f, emissive: 0x401008 });
+    var barrel = new THREE.CylinderGeometry(1.1, 1.1, 2.2, 10), ring = new THREE.CylinderGeometry(1.15, 1.15, 0.3, 10);
+    for (var i = 0; i < c.pickups.length; i++) {
+      var p = c.pickups[i], g = new THREE.Group();
+      var body = new THREE.Mesh(barrel, p.kind === 'cash' ? cashMat : kitMat); body.castShadow = true; g.add(body);
+      if (p.kind === 'cash') { for (var k = -1; k <= 1; k += 2) { var r = new THREE.Mesh(ring, new THREE.MeshLambertMaterial({ color: 0x5a4210 })); r.position.y = k * 0.7; g.add(r); } }
+      else { var cross1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.3, 1.6), redMat); g.add(cross1); var cross2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.3, 0.5), redMat); g.add(cross2); }
+      g.position.set(p.x, 0.9, p.z); parent.add(g); p.mesh = g; pickupMeshes.push(g);
+    }
+  }
+  function animatePickups(c, dt) {
+    for (var i = 0; i < c.pickups.length; i++) {
+      var p = c.pickups[i]; if (!p.mesh) continue;
+      if (p.taken) { if (p.mesh.visible) { p.mesh.scale.multiplyScalar(1 - 8 * dt); p.mesh.position.y += 6 * dt; if (p.mesh.scale.x < 0.05) p.mesh.visible = false; } continue; }
+      p.mesh.position.y = 0.9 + Math.sin(G.t * 2 + p.phase) * 0.25;
+      p.mesh.rotation.y += dt * 1.2; p.mesh.rotation.z = Math.sin(G.t * 1.5 + p.phase) * 0.12;
+    }
+  }
+
+  function buildTraffic(c, parent, rand) {
+    for (var i = 0; i < c.traffic.length; i++) {
+      var t = c.traffic[i];
+      t.mesh = makeBoat(t.kind, rand); parent.add(t.mesh);
+      var p = atS(c, t.s, t.off * c.hw[clamp(Math.round(t.s / STEP), 0, c.n - 1)]);
+      t.x = p.x; t.z = p.z; t.a = t.dir > 0 ? p.a : p.a + Math.PI;
+      t.mesh.position.set(t.x, 0, t.z); t.mesh.rotation.y = -t.a;
+    }
+  }
+  // ---------- the ship ----------
+  var shipG = new THREE.Group(); scene.add(shipG);
+  var labelTex = null, radarBar = null, bowWave = null, shipWindowMats = [], smokeAcc = 0;
+  var funnelTop = new THREE.Vector3(-13.9, 10.9, 0);
+  var headlight = new THREE.SpotLight(0xfff0d0, 0, 150, 0.42, 0.6, 1.0);
+  headlight.position.set(12, 6, 0); headlight.target.position.set(100, -3, 0); shipG.add(headlight); shipG.add(headlight.target);
+  var MAT = {
+    hull: new THREE.MeshPhongMaterial({ color: 0xb83d2a, shininess: 30, specular: 0x3a1a14, side: THREE.DoubleSide }),
+    boot: new THREE.MeshLambertMaterial({ color: 0x17171b, side: THREE.DoubleSide }),
+    deck: new THREE.MeshLambertMaterial({ color: 0x4e6358, side: THREE.DoubleSide }),
+    cream: new THREE.MeshLambertMaterial({ color: 0xf1efe6 }),
+    tank: new THREE.MeshPhongMaterial({ color: 0xf2f3f1, shininess: 60, specular: 0x555555 }),
+    band: new THREE.MeshLambertMaterial({ color: 0xc0432f }),
+    steel: new THREE.MeshLambertMaterial({ color: 0x3b4146 }),
+    grey: new THREE.MeshLambertMaterial({ color: 0x8a9096 }),
+    yellow: new THREE.MeshLambertMaterial({ color: 0xd9b43a }),
+    orange: new THREE.MeshLambertMaterial({ color: 0xf28c28 }),
+    glass: new THREE.MeshLambertMaterial({ color: 0x1d4b66 }),
+    funnel: new THREE.MeshLambertMaterial({ color: 0x2b2e33 })
+  };
+  // hull stations: x along the keel, half-width at the deck, half-width at the bilge, keel depth
+  var ST = [[-15, 3.6, 2.2, -0.9], [-13, 4.3, 3.0, -1.3], [-10, 4.5, 3.4, -1.5], [-5, 4.5, 3.5, -1.5], [0, 4.5, 3.5, -1.5],
+    [5, 4.4, 3.3, -1.5], [9, 3.9, 2.6, -1.4], [12, 2.9, 1.6, -1.2], [14, 1.5, 0.6, -0.8], [15, 0.12, 0.05, -0.3]];
+  function deckY(x) { return 1.8 + (x > 5 ? 0.3 * Math.pow((x - 5) / 10, 2) : 0) + (x < -12 ? 0.06 : 0); }
+  function halfSection(st) { // from the deck edge down to the keel: [z, y]
+    var wd = st[1], wk = st[2], yk = st[3], yd = deckY(st[0]);
+    return [[wd, yd], [wd * 1.02, yd - 1.0], [wk * 1.05, yk + 0.6], [wk * 0.7, yk + 0.15], [0, yk]];
+  }
+  function fullSection(st) { var h = halfSection(st), out = [], i; for (i = 0; i < h.length; i++) out.push(h[i]); for (i = h.length - 2; i >= 0; i--) out.push([-h[i][0], h[i][1]]); return out; }
+  function halfAt(st, y) { // hull half-width at height y, walking the half section
+    var h = halfSection(st);
+    for (var i = 0; i < h.length - 1; i++) { var a = h[i], b = h[i + 1]; if (y <= a[1] && y >= b[1]) { var t = (a[1] - y) / Math.max(0.001, a[1] - b[1]); return a[0] + (b[0] - a[0]) * t; } }
+    return y > h[0][1] ? h[0][0] : 0;
+  }
+  function loft(rows, xs, closeEnds) { // rows of [z, y] per station → one smooth indexed surface
+    var pos = [], idx = [], n = rows[0].length, i, j;
+    for (i = 0; i < rows.length; i++) for (j = 0; j < n; j++) pos.push(xs[i], rows[i][j][1], rows[i][j][0]);
+    for (i = 0; i < rows.length - 1; i++) for (j = 0; j < n - 1; j++) { var a = i * n + j, b = a + n; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    if (closeEnds) {
+      var c0 = pos.length / 3; pos.push(xs[0], (rows[0][0][1] + rows[0][Math.floor(n / 2)][1]) / 2, 0);
+      for (j = 0; j < n - 1; j++) idx.push(c0, j + 1, j);
+      var L = rows.length - 1, c1 = pos.length / 3; pos.push(xs[L], (rows[L][0][1] + rows[L][Math.floor(n / 2)][1]) / 2, 0);
+      for (j = 0; j < n - 1; j++) idx.push(c1, L * n + j, L * n + j + 1);
+    }
+    var g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  function makeWindows(cols, rows) { // cream wall with dark windows, plus a glow map for the night
+    var cv = document.createElement('canvas'), gv = document.createElement('canvas'); cv.width = gv.width = 512; cv.height = gv.height = 256;
+    var x = cv.getContext('2d'), g = gv.getContext('2d');
+    x.fillStyle = '#f1efe6'; x.fillRect(0, 0, 512, 256); g.fillStyle = '#000'; g.fillRect(0, 0, 512, 256);
+    var mx = 40, my = 44, w = (512 - 2 * mx) / cols, h = (256 - 2 * my) / rows;
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+      var px = mx + c * w + w * 0.22, py = my + r * h + h * 0.2, pw = w * 0.56, ph = h * 0.55;
+      x.fillStyle = '#1d4b66'; x.fillRect(px, py, pw, ph); x.fillStyle = 'rgba(255,255,255,0.35)'; x.fillRect(px, py, pw, ph * 0.18);
+      g.fillStyle = Math.random() < 0.8 ? '#ffd9a0' : '#1a1a1a'; g.fillRect(px, py, pw, ph);
+    }
+    var map = new THREE.CanvasTexture(cv), glow = new THREE.CanvasTexture(gv);
+    var m = new THREE.MeshLambertMaterial({ map: map, emissiveMap: glow, emissive: 0x000000 });
+    shipWindowMats.push(m); return m;
+  }
+  function setShipNight(night) { for (var i = 0; i < shipWindowMats.length; i++) shipWindowMats[i].emissive.setHex(night ? 0xffffff : 0x000000); }
+  function add(mesh, x, y, z, shadow) { mesh.position.set(x, y, z); if (shadow) mesh.castShadow = true; shipG.add(mesh); return mesh; }
+  function box(w, h, d, mat) { return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); }
+  function cyl(rt, rb, h, mat, seg) { return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 10), mat); }
+
+  (function buildShip() {
+    var xs = ST.map(function (s) { return s[0]; }), i, s;
+    var hull = new THREE.Mesh(loft(ST.map(fullSection), xs, true), MAT.hull); hull.castShadow = true; hull.receiveShadow = true; shipG.add(hull);
+    shipG.add(new THREE.Mesh(loft(ST.map(function (st) { var a = halfAt(st, 0.35) * 1.012, b = halfAt(st, -0.3) * 1.012; return [[a, 0.35], [b, -0.3], [-b, -0.3], [-a, 0.35]]; }), xs, false), MAT.boot));
+    shipG.add(new THREE.Mesh(loft(ST.map(function (st) { var w = st[1] * 0.995, y = deckY(st[0]); return [[w, y], [-w, y]]; }), xs, false), MAT.deck));
+    for (s = -1; s <= 1; s += 2) shipG.add(new THREE.Mesh(loft(ST.map(function (st) { var w = st[1], y = deckY(st[0]); return [[s * w, y], [s * w * 0.96, y + 0.55]]; }), xs, false), MAT.hull));
+    // six cisterns on saddles, with bands, hatches and relief valves
+    var tankGeo = new THREE.CylinderGeometry(1.3, 1.3, 4.2, 16), capGeo = new THREE.SphereGeometry(1.3, 14, 10), bandGeo = new THREE.CylinderGeometry(1.33, 1.33, 0.5, 16);
+    for (var r = -1; r <= 1; r += 2) for (i = 0; i < 3; i++) {
+      var tx = -6.5 + i * 7, tz = r * 2.15;
+      add(box(4.6, 1.0, 2.9, MAT.steel), tx, 2.3, tz, false);
+      var tank = add(new THREE.Mesh(tankGeo, MAT.tank), tx, 3.3, tz, true); tank.rotation.z = Math.PI / 2;
+      add(new THREE.Mesh(capGeo, MAT.tank), tx - 2.1, 3.3, tz, true); add(new THREE.Mesh(capGeo, MAT.tank), tx + 2.1, 3.3, tz, true);
+      var band = add(new THREE.Mesh(bandGeo, MAT.band), tx, 3.3, tz, false); band.rotation.z = Math.PI / 2;
+      add(cyl(0.32, 0.32, 0.3, MAT.grey), tx - 0.4, 4.7, tz, false);
+      add(cyl(0.1, 0.1, 0.6, MAT.yellow, 6), tx + 1.0, 4.8, tz, false);
+    }
+    // catwalk down the middle with rails, pipelines along the side decks, a valve cluster amidships
+    add(box(15.5, 0.2, 1.1, MAT.grey), -0.5, 4.75, 0, false);
+    for (s = -1; s <= 1; s += 2) {
+      add(box(15.5, 0.05, 0.05, MAT.steel), -0.5, 5.65, s * 0.52, false);
+      for (i = 0; i < 6; i++) add(cyl(0.04, 0.04, 0.9, MAT.steel, 5), -7.5 + i * 2.8, 5.2, s * 0.52, false);
+      var pipe = add(cyl(0.12, 0.12, 15, s > 0 ? MAT.yellow : MAT.grey, 8), -1, 2.15, s * 3.95, false); pipe.rotation.z = Math.PI / 2;
+      add(box(0.5, 0.5, 0.5, MAT.band), 0, 2.4, s * 3.95, false); add(box(0.5, 0.5, 0.5, MAT.band), 1.2, 2.4, s * 3.95, false);
+    }
+    // superstructure: accommodation, second tier, wheelhouse with a wraparound window band, bridge wings
+    var win = makeWindows(7, 2), win2 = makeWindows(5, 1);
+    add(new THREE.Mesh(new THREE.BoxGeometry(6, 3.2, 7.6), [MAT.cream, MAT.cream, MAT.cream, MAT.cream, win, win]), -11.4, 3.4, 0, true);
+    add(new THREE.Mesh(new THREE.BoxGeometry(5, 2.4, 6.4), [MAT.cream, MAT.cream, MAT.cream, MAT.cream, win2, win2]), -11.6, 6.2, 0, true);
+    add(box(4.2, 2.2, 7.8, MAT.cream), -11.0, 8.5, 0, true);
+    add(box(4.3, 0.9, 7.9, MAT.glass), -11.0, 8.95, 0, false);
+    for (s = -1; s <= 1; s += 2) {
+      add(box(1.4, 0.2, 2.4, MAT.cream), -11.0, 7.45, s * 5.1, false);
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 6), new THREE.MeshBasicMaterial({ color: s > 0 ? 0x4aff7a : 0xff4a3a })), -11.0, 7.85, s * 6.2, false);
+      var boat = new THREE.Group(); // lifeboats hung outboard of the accommodation
+      var bb = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 2.4, 10), MAT.orange); bb.rotation.z = Math.PI / 2; boat.add(bb);
+      var e1 = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), MAT.orange); e1.position.x = 1.2; boat.add(e1);
+      var e2 = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), MAT.orange); e2.position.x = -1.2; boat.add(e2);
+      var dav = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.15, 0.9), MAT.steel); dav.position.y = 0.65; boat.add(dav);
+      boat.position.set(-11.4, 5.4, s * 4.35); shipG.add(boat);
+    }
+    // radar mast, antennas, funnel with a red band and a black cap
+    add(cyl(0.1, 0.14, 2.6, MAT.steel, 6), -12.4, 10.9, 0, false);
+    radarBar = add(box(1.8, 0.12, 0.35, MAT.grey), -12.4, 12.25, 0, false);
+    add(cyl(0.04, 0.04, 2.2, MAT.steel, 5), -10.2, 10.6, 1.8, false); add(cyl(0.04, 0.04, 1.6, MAT.steel, 5), -10.2, 10.3, -1.8, false);
+    add(cyl(0.75, 0.95, 3.4, MAT.funnel, 12), -13.9, 9.1, 0, true);
+    add(cyl(0.79, 0.79, 0.5, MAT.band, 12), -13.9, 10.2, 0, false);
+    add(cyl(0.82, 0.82, 0.25, MAT.steel, 12), -13.9, 10.75, 0, false);
+    // bow: forecastle, windlass with drums, bollards, anchors, foremast with a crosstree
+    add(box(3.4, 0.35, 4.4, MAT.deck), 11.3, 2.05, 0, false);
+    add(box(1.4, 0.5, 2.0, MAT.steel), 11.3, 2.45, 0, false);
+    for (s = -1; s <= 1; s += 2) {
+      var drum = add(cyl(0.38, 0.38, 0.5, MAT.grey, 10), 11.3, 2.75, s * 1.25, false); drum.rotation.x = Math.PI / 2;
+      add(cyl(0.2, 0.2, 0.7, MAT.steel, 8), 9.6, 2.35, s * 2.4, false); add(cyl(0.2, 0.2, 0.7, MAT.steel, 8), -14.2, 2.25, s * 2.4, false);
+      add(box(0.5, 0.75, 0.25, MAT.steel), 12.4, 0.95, s * 2.35, false);
+    }
+    add(cyl(0.1, 0.12, 5.5, MAT.steel, 6), 9.0, 4.7, 0, false); add(box(0.1, 0.1, 2.2, MAT.steel), 9.0, 6.6, 0, false);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfff2cc })), 9.0, 7.6, 0, false);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfff2cc })), -12.4, 12.6, 0, false);
+    // bow wave: a flat white V under the stem that stretches with speed
+    var vs = new THREE.Shape(); vs.moveTo(0.6, 0); vs.lineTo(-7, 4.6); vs.lineTo(-7.5, 3.5); vs.lineTo(-0.9, 0); vs.lineTo(-7.5, -3.5); vs.lineTo(-7, -4.6); vs.closePath();
+    bowWave = new THREE.Mesh(new THREE.ShapeGeometry(vs), new THREE.MeshBasicMaterial({ color: 0xeaf6f8, transparent: true, opacity: 0.6, depthWrite: false }));
+    bowWave.rotation.x = -Math.PI / 2; bowWave.position.set(13.6, 0.07, 0); shipG.add(bowWave);
+    // the name: tilted onto the flare of both sides, across the transom and on the back of the accommodation
+    labelTex = makeLabel('МЕГАЛЮЛЬ', '#fff6e8', 'rgba(0,0,0,0)', 150);
+    var labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, depthWrite: false });
+    var st = ST[3], wA = halfAt(st, 0.4), wB = halfAt(st, 1.7), tilt = Math.atan2(wB - wA, 1.3);   // the side flares out going up, so the name leans with it
+    var lz = (wA + wB) / 2 + 0.03, ly = 1.05;
+    var sideR = add(new THREE.Mesh(new THREE.PlaneGeometry(7, 1.4), labelMat), -3, ly, lz, false); sideR.rotation.set(tilt, 0, 0);
+    var sideL = add(new THREE.Mesh(new THREE.PlaneGeometry(7, 1.4), labelMat), -3, ly, -lz, false); sideL.rotation.set(-tilt, Math.PI, 0);
+    var back = add(new THREE.Mesh(new THREE.PlaneGeometry(6.2, 1.55), labelMat), -14.42, 3.4, 0, false); back.rotation.y = -Math.PI / 2;
+    var stern = add(new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), labelMat), -15.03, 0.55, 0, false); stern.rotation.y = -Math.PI / 2;
+  })();
+  function applyTanker(t) { // paint, size and name of the active tanker; the collision probes follow the hull
+    MAT.hull.color.setHex(t.hull); MAT.band.color.setHex(t.band); MAT.tank.color.setHex(t.tanksCol);
+    var k = t.size, kz = Math.pow(k, 0.7);
+    shipG.scale.set(k, Math.pow(k, 0.5), kz);
+    SPTS = SHIP_PTS.map(function (p) { return p * k; }); PR = PROBE_R * kz;
+    if (labelTex) { labelTex.image = makeLabel(t.label, '#fff6e8', 'rgba(0,0,0,0)', 150).image; labelTex.needsUpdate = true; }
+  }
+
+  function animateShip(dt) { // radar sweep, bow wave by speed, funnel smoke by throttle
+    if (!S) return;
+    radarBar.rotation.y += dt * 2.2;
+    var sp = S.sp || 0, k = 0.15 + Math.min(1.2, sp / 22);
+    bowWave.scale.set(k, k, 1); bowWave.material.opacity = Math.min(0.75, sp / 25);
+    if (G.mode === 'play' || G.mode === 'pause' || G.mode === 'title') {
+      var rate = (sp > 0.5 ? 1.5 + sp * 0.2 : 0.8) + (G.boosting ? 6 : 0);
+      smokeAcc += dt * rate;
+      shipG.updateMatrixWorld(true);
+      while (smokeAcc >= 1) {
+        smokeAcc -= 1;
+        var p = shipG.localToWorld(funnelTop.clone());
+        spawn(smoke, p.x, p.y, p.z, S.vx * 0.35 + (Math.random() - 0.5) * 1.5, 2.2 + Math.random() * 1.2, S.vz * 0.35 + (Math.random() - 0.5) * 1.5, 0.9 + Math.random() * 0.6);
+      }
+    }
+  }
+
+  // ---------- wake ribbon and foam ----------
+  var WAKE_N = 80, wakePts = [];
+  var wakeGeo = new THREE.BufferGeometry();
+  wakeGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(WAKE_N * 6), 3));
+  wakeGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(WAKE_N * 6), 3));
+  wakeGeo.setIndex((function () { var idx = []; for (var i = 0; i < WAKE_N - 1; i++) { var a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } return idx; })());
+  var wake = new THREE.Mesh(wakeGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }));
+  wake.frustumCulled = false; wake.position.y = 0.05; scene.add(wake);
+  var wakeWhite = new THREE.Color(0xe6f3f5);
+
+  function updateWake() {
+    var fx = Math.cos(S.a), fz = Math.sin(S.a);
+    var sx = S.x - fx * 14, sz = S.z - fz * 14;
+    var last = wakePts[0];
+    if (!last || (last.x - sx) * (last.x - sx) + (last.z - sz) * (last.z - sz) > 1.2) {
+      wakePts.unshift({ x: sx, z: sz, nx: -fz, nz: fx, sp: Math.sqrt(S.vx * S.vx + S.vz * S.vz) });
+      if (wakePts.length > WAKE_N) wakePts.pop();
+    }
+    var pos = wakeGeo.attributes.position.array, col = wakeGeo.attributes.color.array, i, c = new THREE.Color();
+    for (i = 0; i < WAKE_N; i++) {
+      var p = wakePts[Math.min(i, wakePts.length - 1)] || { x: sx, z: sz, nx: -fz, nz: fx, sp: 0 };
+      var t = i / (WAKE_N - 1), w = 2.2 + t * 9 * Math.min(1, p.sp / 12);
+      pos[i * 6] = p.x + p.nx * w; pos[i * 6 + 1] = 0; pos[i * 6 + 2] = p.z + p.nz * w;
+      pos[i * 6 + 3] = p.x - p.nx * w; pos[i * 6 + 4] = 0; pos[i * 6 + 5] = p.z - p.nz * w;
+      c.copy(wakeWhite).lerp(COL.water, Math.pow(t, 0.7) * 0.97 + (p.sp < 2 ? 0.03 : 0));
+      col[i * 6] = c.r; col[i * 6 + 1] = c.g; col[i * 6 + 2] = c.b; col[i * 6 + 3] = c.r; col[i * 6 + 4] = c.g; col[i * 6 + 5] = c.b;
+    }
+    wakeGeo.attributes.position.needsUpdate = true; wakeGeo.attributes.color.needsUpdate = true;
+  }
+  function resetWake() { wakePts.length = 0; }
+
+  function makeParticles(count, color, size) {
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
+    var pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: color, size: size, transparent: true, opacity: 0.85, depthWrite: false, sizeAttenuation: true }));
+    pts.frustumCulled = false; scene.add(pts);
+    var items = []; for (var i = 0; i < count; i++) items.push({ life: 0, x: 0, y: -50, z: 0, vx: 0, vy: 0, vz: 0 });
+    return { pts: pts, items: items, next: 0 };
+  }
+  var foam = makeParticles(260, 0xeaf6f8, 1.7), sparks = makeParticles(120, 0xffa24a, 1.1), smoke = makeParticles(120, 0x4a4c55, 1.7);
+  smoke.pts.material.opacity = 0.3;
+  function spawn(sys, x, y, z, vx, vy, vz, life) {
+    var p = sys.items[sys.next]; sys.next = (sys.next + 1) % sys.items.length;
+    p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.life = life;
+  }
+  function stepParticles(sys, dt, gravity) {
+    var arr = sys.pts.geometry.attributes.position.array;
+    for (var i = 0; i < sys.items.length; i++) {
+      var p = sys.items[i];
+      if (p.life > 0) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= gravity * dt; p.vx *= 0.97; p.vz *= 0.97; if (p.y < 0.1 && gravity === 0) p.y = 0.1; }
+      arr[i * 3] = p.x; arr[i * 3 + 1] = p.life > 0 ? p.y : -50; arr[i * 3 + 2] = p.z;
+    }
+    sys.pts.geometry.attributes.position.needsUpdate = true;
+  }
+
+  // ---------- chase camera ----------
+  var camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camInit = false;
+  function updateCamera(dt, snap) {
+    var aspect = camera.aspect, portrait = aspect < 1;
+    var back = portrait ? 46 : 36, up = portrait ? 30 : 21;
+    var sp = Math.sqrt(S.vx * S.vx + S.vz * S.vz);
+    var dir = S.a;
+    if (sp > 3) { var va = Math.atan2(S.vz, S.vx); dir = S.a + angDiff(va, S.a) * 0.45; } // lean into the slide
+    var dx = Math.cos(dir), dz = Math.sin(dir);
+    var want = new THREE.Vector3(S.x - dx * back, up, S.z - dz * back);
+    var look = new THREE.Vector3(S.x + dx * 30, 0.5, S.z + dz * 30);
+    if (snap || !camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
+    else { var k = 1 - Math.exp(-4.5 * dt), k2 = 1 - Math.exp(-7 * dt); camPos.lerp(want, k); camLook.lerp(look, k2); }
+    var fovWant = (portrait ? 62 : 55) + (G.boosting ? 9 : 0) + Math.min(6, sp * 0.15) + Math.min(8, (S.slip || 0) * 8);
+    camera.fov += (fovWant - camera.fov) * (snap ? 1 : 1 - Math.exp(-4 * dt)); camera.updateProjectionMatrix();
+    camera.position.copy(camPos);
+    if (G.shake > 0) { camera.position.x += (Math.random() - 0.5) * G.shake; camera.position.y += (Math.random() - 0.5) * G.shake; camera.position.z += (Math.random() - 0.5) * G.shake; G.shake = Math.max(0, G.shake - dt * 2.5); }
+    camera.lookAt(camLook);
+    sky.position.copy(camPos);
+    sun.position.set(S.x - 120, 110, S.z + 160); sun.target.position.set(S.x, 0, S.z); sun.target.updateMatrixWorld();
+  }
+
+  // ---------- other boats ----------
+  function makeBoat(kind, rand) {
+    var g = new THREE.Group();
+    var barge = kind === 'barge';
+    var len = barge ? 24 : 13, wid = barge ? 6.6 : 4.2;
+    var cols = barge ? [0x3b4a5a, 0x5a4a3b, 0x2f5a4a, 0x6b3a3a] : [0x2a6fb0, 0xd9d2c0, 0x6f8f3a, 0xc9573a];
+    var shape = new THREE.Shape();
+    shape.moveTo(-len / 2, -wid / 2); shape.lineTo(len / 2 - wid * 0.9, -wid / 2); shape.lineTo(len / 2, 0); shape.lineTo(len / 2 - wid * 0.9, wid / 2); shape.lineTo(-len / 2, wid / 2); shape.closePath();
+    var hull = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: false }), new THREE.MeshLambertMaterial({ color: cols[Math.floor(rand() * cols.length)] }));
+    hull.rotation.x = Math.PI / 2; hull.position.y = 1.3; hull.castShadow = true; g.add(hull);
+    var dark = new THREE.MeshLambertMaterial({ color: 0x3b4146 }), white = new THREE.MeshLambertMaterial({ color: 0xeeeeea });
+    if (barge) {
+      var heap = new THREE.Mesh(new THREE.BoxGeometry(len * 0.58, 1.9, wid * 0.72), new THREE.MeshLambertMaterial({ color: rand() < 0.5 ? 0x8a6a3a : 0x6a7a86 })); heap.position.set(1.5, 2.2, 0); heap.castShadow = true; g.add(heap);
+      var house = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.8, wid * 0.7), white); house.position.set(-len / 2 + 2.6, 2.7, 0); house.castShadow = true; g.add(house);
+      var win = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.9, wid * 0.66), new THREE.MeshLambertMaterial({ color: 0x1d4b66 })); win.position.set(-len / 2 + 4.25, 3.3, 0); g.add(win);
+    } else {
+      var cabin = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.3, 2.8), white); cabin.position.set(-1.5, 2.45, 0); cabin.castShadow = true; g.add(cabin);
+      var win2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 2.6), new THREE.MeshLambertMaterial({ color: 0x1d4b66 })); win2.position.set(0.35, 2.9, 0); g.add(win2);
+      var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 4.5, 6), dark); mast.position.set(-1.5, 5.5, 0); g.add(mast);
+      var boom = new THREE.Mesh(new THREE.BoxGeometry(5, 0.2, 0.2), dark); boom.position.set(-0.5, 6.2, 0); boom.rotation.z = 0.35; g.add(boom);
+    }
+    var topY = barge ? 4.4 : 7.6, lx = barge ? -len / 2 + 2.6 : -1.5;
+    var red = new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff4a3a })); red.position.set(lx, topY - 0.6, -wid / 2 - 0.1); g.add(red);
+    var green = new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 6), new THREE.MeshBasicMaterial({ color: 0x4aff7a })); green.position.set(lx, topY - 0.6, wid / 2 + 0.1); g.add(green);
+    var top = new THREE.Mesh(new THREE.SphereGeometry(0.3, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfff2cc })); top.position.set(lx, topY + 0.4, 0); g.add(top);
+    g.userData.len = len; g.userData.half = wid / 2;
+    return g;
+  }
+
+  // ---------- sound ----------
+  var muted = false;
+  try { muted = localStorage.getItem('megalul3d-muted') === '1'; } catch (e) {}
+  var AC = null, master = null, engine = null, hiss = null;
+  function audio() {
+    if (muted) return null;
+    try {
+      if (!AC) { AC = new (window.AudioContext || window.webkitAudioContext)(); master = AC.createGain(); master.gain.value = 0.9; master.connect(AC.destination); }
+      if (AC.state === 'suspended') AC.resume();
+      return AC;
+    } catch (e) { return null; }
+  }
+  function ensureEngine(ac) {
+    if (engine) return;
+    var o1 = ac.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 45;
+    var o2 = ac.createOscillator(); o2.type = 'triangle'; o2.frequency.value = 90;
+    var f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260; f.Q.value = 2;
+    var g = ac.createGain(); g.gain.value = 0;
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(master); o1.start(); o2.start();
+    engine = { o1: o1, o2: o2, f: f, g: g };
+    var len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    var src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+    var bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.6;
+    var hg = ac.createGain(); hg.gain.value = 0;
+    src.connect(bp); bp.connect(hg); hg.connect(master); src.start();
+    hiss = { g: hg, f: bp };
+  }
+  function updateAudio(speed, slip, boosting) {
+    if (muted || !AC || !engine) return;
+    var t = AC.currentTime, playing = G.mode === 'play';
+    engine.g.gain.setTargetAtTime((playing ? 0.09 + Math.min(0.1, speed / 220) : 0.025) * (voiceActive() ? 0.3 : 1), t, 0.12);
+    engine.o1.frequency.setTargetAtTime(38 + speed * 2.4 + (boosting ? 18 : 0), t, 0.15);
+    engine.o2.frequency.setTargetAtTime(76 + speed * 4.8 + (boosting ? 36 : 0), t, 0.15);
+    engine.f.frequency.setTargetAtTime(220 + speed * 14 + (boosting ? 500 : 0), t, 0.15);
+    hiss.g.gain.setTargetAtTime(playing ? Math.min(0.28, slip * speed * 0.035) : 0, t, 0.08);
+  }
+  function tone(ac, freq, t0, dur, type, gain, slide) {
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  function noiseBurst(ac, t0, dur, gain, cutoff) {
+    var len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    var src = ac.createBufferSource(); src.buffer = buf;
+    var f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff;
+    var g = ac.createGain(); g.gain.value = gain;
+    src.connect(f); f.connect(g); g.connect(master); src.start(t0);
+  }
+  function sfx(name, k) {
+    var ac = audio(); if (!ac) return; ensureEngine(ac); var t = ac.currentTime;
+    if (name === 'hit') { noiseBurst(ac, t, 0.35, 0.25 + 0.45 * (k || 0.5), 600); tone(ac, 70, t, 0.3, 'sawtooth', 0.25, 35); }
+    else if (name === 'scrape') noiseBurst(ac, t, 0.18, 0.1, 1600);
+    else if (name === 'cash') { tone(ac, 880, t, 0.08, 'square', 0.07); tone(ac, 1320, t + 0.08, 0.16, 'square', 0.07); }
+    else if (name === 'repair') [523, 659, 784].forEach(function (f, i) { tone(ac, f, t + i * 0.09, 0.22, 'triangle', 0.12); });
+    else if (name === 'boost') tone(ac, 160, t, 0.6, 'sawtooth', 0.1, 760);
+    else if (name === 'horn') { var hm = k || 1; tone(ac, 110 * hm, t, 0.7, 'square', 0.1); tone(ac, 138.6 * hm, t, 0.7, 'square', 0.08); tone(ac, 55 * hm, t, 0.7, 'sawtooth', 0.07); }
+    else if (name === 'nearmiss') tone(ac, 1100, t, 0.07, 'sine', 0.08, 1900);
+    else if (name === 'dock') { sfx('horn'); [523, 659, 784, 1046].forEach(function (f, i) { tone(ac, f, t + 0.35 + i * 0.11, 0.25, 'triangle', 0.14); }); }
+    else if (name === 'fail') { tone(ac, 220, t, 0.9, 'sawtooth', 0.16, 50); noiseBurst(ac, t, 0.8, 0.5, 400); }
+    else if (name === 'start') { tone(ac, 440, t, 0.1, 'triangle', 0.1); tone(ac, 660, t + 0.1, 0.15, 'triangle', 0.1); }
+    else if (name === 'tick') tone(ac, 880, t, 0.07, 'sine', 0.07);
+    else if (name === 'radio') { noiseBurst(ac, t, 0.12, 0.05, 2600); tone(ac, 1500, t, 0.03, 'square', 0.025); }
+    else if (name === 'exit') { tone(ac, 660, t, 0.08, 'square', 0.08); tone(ac, 990, t + 0.08, 0.12, 'square', 0.08); tone(ac, 1320, t + 0.18, 0.18, 'square', 0.07); }
+    else if (name === 'deny') { tone(ac, 200, t, 0.12, 'square', 0.08); tone(ac, 160, t + 0.12, 0.2, 'square', 0.08); }
+    else if (name === 'late') { tone(ac, 330, t, 0.25, 'square', 0.1); tone(ac, 262, t + 0.25, 0.4, 'square', 0.1); }
+  }
+  function toggleMute() {
+    muted = !muted;
+    try { localStorage.setItem('megalul3d-muted', muted ? '1' : '0'); } catch (e) {}
+    var b = document.getElementById('muteBtn'); if (b) b.textContent = muted ? 'Звук: выкл' : 'Звук: вкл';
+    if (AC) { if (muted) AC.suspend(); else AC.resume(); }
+    if (muted) stopVoice();
+  }
+  (function () { var b = document.getElementById('muteBtn'); if (b) { b.textContent = muted ? 'Звук: выкл' : 'Звук: вкл'; b.addEventListener('click', function () { toggleMute(); b.blur(); }); } })();
+  // ---------- career: tankers, the shipyard's four rooms, production, contracts, experience, saving ----------
+  // tuning is per tanker; the dock level caps how deep each item may go
+  var TUNING = [
+    { key: 'engine', name: 'Двигатель', desc: 'Выше крейсерская скорость и разгон, форсаж тоже быстрее.', prices: [1500, 2700, 4300], fx: function (l) { return (tanker().cruise + 2 * l) + ' м/с крейсер'; } },
+    { key: 'rudder', name: 'Руль', desc: 'Резче поворот и послушнее занос: проще держать угол и ловить корму контррулём.', prices: [1300, 2400, 3900], fx: function (l) { return '+' + 15 * l + '% к повороту'; } },
+    { key: 'boost', name: 'Форсаж', desc: 'Больше бак форсажа и быстрее зарядка от дрифта.', prices: [1200, 2200, 3600], fx: function (l) { return Math.round((100 + 40 * l) * tanker().boostCap) + ' ед. · заряд ×' + (1 + 0.25 * l).toFixed(2); } },
+    { key: 'fenders', name: 'Кранцы', desc: 'Мягче удары о берег, камни и чужие борта, цистерны страдают меньше.', prices: [1000, 2000, 3400], fx: function (l) { return '−' + Math.round(17 * l) + '% урона'; } },
+    { key: 'thruster', name: 'Подруливающее', desc: 'На малом ходу руль двигает корабль боком. Швартовка становится делом техники.', prices: [1800, 3000, 4600], fx: function (l) { return l ? 'боковой ход до ' + (0.7 * l).toFixed(1) + ' м/с' : 'нет'; } }
+  ];
+  // the fleet: cls is the dock level it needs, tanks is how much one voyage carries, armour scales the damage (lower is tougher), size scales the hull and its collision probes
+  var TANKERS = [
+    { id: 'megalul', name: 'Мегалюль', label: 'МЕГАЛЮЛЬ', cls: 1, price: 0, tanks: 10, cruise: 23, boost: 33, handling: 1.0, armour: 1.0, boostCap: 1.0, size: 1.0, hull: 0xb83d2a, band: 0xc0432f, tanksCol: 0xf2f3f1, desc: 'Тот самый. Десять цистерн, ровный характер, ничего лишнего.' },
+    { id: 'saratovets', name: 'Саратовец', label: 'САРАТОВЕЦ', cls: 1, price: 9000, tanks: 8, cruise: 26, boost: 38, handling: 1.3, armour: 1.25, boostCap: 0.9, size: 0.88, hull: 0x2f6fa8, band: 0xf2b632, tanksCol: 0xe9ecef, desc: 'Речной малыш: быстрый и вертлявый, но борта тонкие и цистерн всего восемь.' },
+    { id: 'volgodon', name: 'Волго-Дон', label: 'ВОЛГО-ДОН', cls: 2, price: 16000, tanks: 13, cruise: 21, boost: 30, handling: 0.85, armour: 0.7, boostCap: 1.1, size: 1.12, hull: 0x3e4a3a, band: 0xd9b43a, tanksCol: 0xd9d4c4, desc: 'Класс «река-море». Неторопливый, зато терпит удары и берёт тринадцать цистерн.' },
+    { id: 'extra', name: 'Экстра', label: 'ЭКСТРА', cls: 2, price: 26000, tanks: 12, cruise: 25, boost: 37, handling: 1.12, armour: 0.9, boostCap: 1.25, size: 1.04, hull: 0xf1efe6, band: 0x1f4f72, tanksCol: 0x1f4f72, desc: 'Экстра причаливание. Быстрый, послушный, с большим баком форсажа.' },
+    { id: 'cruiser', name: 'Крейсер', label: 'КРЕЙСЕР', cls: 3, price: 48000, tanks: 20, cruise: 22, boost: 33, handling: 0.75, armour: 0.55, boostCap: 1.4, size: 1.28, hull: 0x4a4f57, band: 0xb83d2a, tanksCol: 0xc9ccd1, desc: 'Крейсер у меня! Двадцать цистерн и броня, но поворачивает как дом.' }
+  ];
+  var T = TANKERS[0];
+  function tanker() { if (T.id !== G.tanker) { T = TANKERS[0]; for (var i = 0; i < TANKERS.length; i++) if (TANKERS[i].id === G.tanker) T = TANKERS[i]; } return T; }
+  // the four rooms of the shipyard, levels 1 to 3; each step needs a captain's rank and money
+  var ROOMS = [
+    { key: 'office', name: 'Контора', desc: 'Заказы и связь с диспетчерами. Выше уровень: больше заказов на доске, дальше регионы, больше времени на рейс и надбавка к оплате.', prices: [4000, 15000], rank: [2, 5],
+      fx: function (l) { return (2 + l) + (l === 3 ? ' заказов' : ' заказа') + ' · регионов ' + Math.min(ROUTE.length, 2 * l) + ' · +' + 20 * (l - 1) + ' с · +' + 8 * (l - 1) + '%'; } },
+    { key: 'plant', name: 'Цех', desc: 'Здесь делают удобрение. Китайское, нормальное, чистое. Цех работает и пока вы в рейсе, и пока игра закрыта.', prices: [2500, 9000], rank: [1, 3],
+      fx: function (l) { return 'цистерна за ' + [12, 8, 5][l - 1] + ' с'; } },
+    { key: 'store', name: 'Склад', desc: 'Парк резервуаров. Когда он полон, цех останавливается, так что перед долгим перерывом склад стоит расширить.', prices: [2000, 7000], rank: [2, 4],
+      fx: function (l) { return 'до ' + [20, 40, 80][l - 1] + ' цистерн'; } },
+    { key: 'dock', name: 'Док', desc: 'Причальная стенка и мастерская. Уровень дока решает, какой класс танкера можно купить и как глубоко его дорабатывать.', prices: [6000, 20000], rank: [3, 6],
+      fx: function (l) { return 'танкеры ' + l + '-го класса · доработки до ' + l + '-й ступени'; } }
+  ];
+  // the route from China to Saratov; the office opens it two regions at a time. off raises the difficulty, width narrows the fairway, relief flattens the banks
+  var ROUTE = [
+    { name: 'Янцзы', ports: ['Шанхай', 'Нинбо', 'Нантун', 'Циндао'], land: 'river', off: 0, pay: 1.0, width: 1.0, relief: 0.8, trees: 1.0, traffic: 1.0, bridge: 0.6 },
+    { name: 'Малаккский пролив', ports: ['Сингапур', 'Порт-Кланг', 'Пенанг', 'Малакка'], land: 'tropic', off: 1, pay: 1.1, width: 0.95, relief: 0.6, trees: 1.3, traffic: 1.5, bridge: 0.5 },
+    { name: 'Суэцкий канал', ports: ['Порт-Саид', 'Исмаилия', 'Суэц', 'Эль-Кантара'], land: 'desert', off: 2, pay: 1.2, width: 0.8, relief: 0.22, trees: 0.08, traffic: 1.2, bridge: 0.4 },
+    { name: 'Босфор', ports: ['Стамбул', 'Бейкоз', 'Ускюдар', 'Сарыер'], land: 'city', off: 3, pay: 1.3, width: 0.9, relief: 0.55, trees: 0.5, traffic: 1.7, bridge: 1.0 },
+    { name: 'Азов и Дон', ports: ['Керчь', 'Таганрог', 'Азов', 'Ростов-на-Дону'], land: 'steppe', off: 4, pay: 1.4, width: 0.85, relief: 0.3, trees: 0.35, traffic: 1.2, bridge: 0.8 },
+    { name: 'Волга', ports: ['Волгодонск', 'Волгоград', 'Камышин', 'Саратов'], land: 'volga', off: 5, pay: 1.5, width: 1.15, relief: 0.55, trees: 0.9, traffic: 1.3, bridge: 0.9 }
+  ];
+  // what the client wants: w is the share on the board, time scales the deadline, dmg the damage; a double batch is simply a big order
+  var KINDS = [
+    { key: 'std', name: 'Удобрение', note: 'Китайский, нормальный, чистый.', w: 0.5, pay: 1, xp: 1, time: 1, dmg: 1 },
+    { key: 'urgent', name: 'Срочно', note: 'Испортится! Груз испортится!', w: 0.2, pay: 1.4, xp: 1.2, time: 0.7, dmg: 1, tag: 'hot', tagText: 'срочно' },
+    { key: 'night', name: 'Ночной рейс', note: 'Не слышу вас. Как слышно, второй?', w: 0.15, pay: 1.25, xp: 1.2, time: 1, dmg: 1, tag: 'night', tagText: 'ночь' },
+    { key: 'double', name: 'Двойная партия', note: 'У меня десять цистерн здесь! Нет, двадцать.', w: 0.15, pay: 1.3, xp: 1.5, time: 1.1, dmg: 1.25, tag: 'hot', tagText: 'крупный' }
+  ];
+  function tune() { if (!G.tune) G.tune = {}; return G.tune[G.tanker] || (G.tune[G.tanker] = {}); }
+  function upLevel(key) { return tune()[key] || 0; }
+  function yardLevel(key) { return (G.yard && G.yard[key]) || 1; }
+  function cruiseSpeed() { return tanker().cruise + 2 * upLevel('engine'); }
+  function boostSpeed() { return tanker().boost + 2 * upLevel('engine'); }
+  function boostCap() { return Math.round((100 + 40 * upLevel('boost')) * tanker().boostCap); }
+  function dmgScale() { return tanker().armour * (1 - 0.17 * upLevel('fenders')) * (G.job ? KINDS[G.job.kind].dmg : 1); }
+  function officePay() { return 1 + 0.08 * (yardLevel('office') - 1); }
+  function jobPay(job) { return Math.round(job.pay * officePay()); }
+  function deadline(c) { return Math.round((c.dockS / 13 + 40 + 20 * (yardLevel('office') - 1)) * KINDS[G.job.kind].time); }
+  function tunePrice(u, l) { return Math.round(u.prices[l] * (1 + 0.3 * (tanker().cls - 1))); }
+  function xpNeed(rank) { return Math.round(100 * Math.pow(rank, 1.4)); }
+  function addXp(n) { G.xp += n; var ups = 0; while (G.xp >= xpNeed(G.rank)) { G.xp -= xpNeed(G.rank); G.rank += 1; ups += 1; } return ups; }
+  function regionsOpen() { return Math.min(ROUTE.length, 2 * yardLevel('office')); }
+  function tankWord(n) { n = Math.floor(n); var m10 = n % 10, m100 = n % 100; return n + (m10 === 1 && m100 !== 11 ? ' цистерна' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? ' цистерны' : ' цистерн'); }
+  // the plant fills the tank farm in real time, also while the page is closed; a full farm stops it
+  var FILL_PRICE = 150;   // roubles per tank bought outright instead of waiting
+  function prodRate() { return [12, 8, 5][yardLevel('plant') - 1]; }   // seconds per tank
+  function storeCap() { return [20, 40, 80][yardLevel('store') - 1]; }
+  function accrue() {
+    var now = Date.now(); if (!G.prodAt || G.prodAt > now) G.prodAt = now;
+    var made = (now - G.prodAt) / 1000 / prodRate();
+    if (made > 0) { G.stock = Math.min(storeCap(), (G.stock || 0) + made); G.prodAt = now; }
+  }
+  function stockWhole() { return Math.floor(G.stock + 1e-6); }
+  // the board: a few offers fixed by the seed, so a failed contract can be retried; a delivery reseeds it
+  function makeBoard(seed) {
+    var rand = rng(seed), n = 2 + yardLevel('office'), open = regionsOpen(), list = [];
+    for (var i = 0; i < n; i++) {
+      var region = i === 0 ? 0 : Math.floor(rand() * open), R = ROUTE[region];   // the first offer is always the nearest region
+      var kw = rand(), kind = 0, acc = 0;
+      for (var k = 0; k < KINDS.length; k++) { acc += KINDS[k].w; if (kw < acc) { kind = k; break; } }
+      var K = KINDS[kind];
+      var lenK = [0.75, 1, 1, 1.3][Math.floor(rand() * 4)];
+      var diff = clamp(Math.floor(G.done / 2) + R.off + (i === 0 ? 0 : Math.floor(rand() * 2.4)), 1, 16);   // and the easiest the career allows
+      var amount = K.key === 'double' ? clamp(12 + Math.floor(G.done / 4) + Math.floor(rand() * 5), 12, 20) : clamp(4 + Math.floor(G.done / 3) + Math.floor(rand() * 4), 3, 12);
+      if (i === 0) amount = Math.min(amount, 6);   // and always small enough to take straight away
+      var theme = K.key === 'night' ? 1 : [0, 2, 0, 1, 2][Math.floor(rand() * 5)];
+      list.push({
+        id: seed * 16 + i, seed: (seed * 7 + i * 131) % 1000003, region: region, port: R.ports[Math.floor(rand() * R.ports.length)], kind: kind, amount: amount,
+        diff: diff, lenK: lenK, theme: theme, bridge: diff >= 2 && rand() < R.bridge,
+        pay: Math.round((240 + 70 * diff) * Math.pow(lenK, 0.8) * R.pay * K.pay * amount),
+        xp: Math.round((40 + 22 * diff) * lenK * K.xp)
+      });
+    }
+    return list;
+  }
+  function board() { if (!G.board || G.board.seed !== G.boardSeed) G.board = { seed: G.boardSeed, list: makeBoard(G.boardSeed) }; return G.board.list; }
+  function newBoard() { G.boardSeed = (G.boardSeed * 48271 + 11 + G.done) % 1000003; G.board = null; }
+  function canTake(j) { // why an offer cannot be taken right now, or '' when it can
+    if (j.amount > tanker().tanks) return 'Нужен танкер на ' + tankWord(j.amount);
+    if (j.amount > stockWhole()) return 'Удобрения ' + stockWhole() + ' из ' + j.amount;
+    return '';
+  }
+  function defaultYard() { return { office: 1, plant: 1, store: 1, dock: 1 }; }
+  function resetCareer() { G.money = 0; G.earned = 0; G.done = 0; G.xp = 0; G.rank = 1; G.yard = defaultYard(); G.fleet = ['megalul']; G.tanker = 'megalul'; G.tune = { megalul: {} }; G.boardSeed = 1 + (G.runSeed % 9973); G.board = null; G.job = null; G.stock = 10; G.prodAt = Date.now(); }
+  function saveData() { return { v: 3, money: G.money, earned: G.earned, done: G.done, xp: G.xp, rank: G.rank, yard: G.yard, fleet: G.fleet, tanker: G.tanker, tune: G.tune, boardSeed: G.boardSeed, stock: G.stock, prodAt: G.prodAt }; }
+  function saveGame() { try { localStorage.setItem('megalul3d-save', JSON.stringify(saveData())); } catch (e) {} }
+  function loadGame() { try { var s = JSON.parse(localStorage.getItem('megalul3d-save')); if (s && (s.v >= 2 || s.level)) return s; } catch (e) {} return null; }
+  function clearSave() { try { localStorage.removeItem('megalul3d-save'); } catch (e) {} }
+  function applySave(s) {
+    resetCareer();
+    var i, k;
+    if (!s.v) { // a save from before the shipyard: contract number, money and one set of upgrades on the only tanker
+      G.done = Math.max(0, (s.level | 0) - 1); G.money = s.money || 0; G.earned = s.earned != null ? s.earned : G.money;
+      var old = s.up || {}, t = {};
+      for (i = 0; i < TUNING.length; i++) if (old[TUNING[i].key]) t[TUNING[i].key] = clamp(old[TUNING[i].key] | 0, 0, 3);
+      G.tune = { megalul: t }; G.yard.office = clamp(1 + (old.radio | 0), 1, 3);
+      addXp(Math.round(G.done * 90));
+      return;
+    }
+    G.money = s.money || 0; G.earned = s.earned != null ? s.earned : G.money; G.done = s.done | 0; G.xp = s.xp | 0; G.rank = Math.max(1, s.rank | 0);
+    var y = defaultYard(), sy = s.yard || {};
+    for (k in y) if (sy[k]) y[k] = clamp(sy[k] | 0, 1, 3);
+    if (s.v === 2 && sy.workshop) y.dock = clamp(Math.max(y.dock, sy.workshop | 0), 1, 3);   // the workshop moved into the dock
+    G.yard = y;
+    var known = {}; for (i = 0; i < TANKERS.length; i++) known[TANKERS[i].id] = true;
+    G.fleet = []; if (Array.isArray(s.fleet)) for (i = 0; i < s.fleet.length; i++) if (known[s.fleet[i]] && G.fleet.indexOf(s.fleet[i]) < 0) G.fleet.push(s.fleet[i]);
+    if (G.fleet.indexOf('megalul') < 0) G.fleet.unshift('megalul');
+    G.tanker = G.fleet.indexOf(s.tanker) >= 0 ? s.tanker : G.fleet[0];
+    G.tune = {};
+    if (s.tune) for (var id in s.tune) if (known[id]) { var src = s.tune[id] || {}, dst = {}; for (i = 0; i < TUNING.length; i++) if (src[TUNING[i].key]) dst[TUNING[i].key] = clamp(src[TUNING[i].key] | 0, 0, 3); G.tune[id] = dst; }
+    if (s.boardSeed) G.boardSeed = s.boardSeed | 0;
+    if (typeof s.stock === 'number') { G.stock = clamp(s.stock, 0, 80); G.prodAt = s.prodAt > 0 ? s.prodAt : Date.now(); }
+    accrue();
+  }
+
+  // ---------- ship physics ----------
+  function resetShip() {
+    S = { x: C.start.x, z: C.start.z, a: C.start.a, vx: 0, vz: 0, w: 0, idx: 8, s: 8 * STEP, sp: 0, slip: 0, scrape: 0, scrapeSnd: 0,
+      kick: 0, spin: 0, driftT: 0, hitInDrift: false, burst: 0, downPrev: false };
+    shipG.visible = true; resetWake(); updateCamera(0, true); placeShip();
+  }
+  function placeShip() {
+    shipG.position.set(S.x, 0, S.z); shipG.rotation.y = -S.a;
+    var vL = -S.vx * Math.sin(S.a) + S.vz * Math.cos(S.a);
+    shipG.rotation.z = -S.w * 0.3 - vL * 0.018 - Math.sin(G.t * 1.3) * 0.012;   // heel into the turn and the slide
+    shipG.rotation.x = Math.sin(G.t * 0.9) * 0.01 + S.sp * 0.0015;
+  }
+
+  function stepShip(dt) {
+    var fx = Math.cos(S.a), fz = Math.sin(S.a);
+    var vF = S.vx * fx + S.vz * fz, vL = -S.vx * fz + S.vz * fx;
+    var toDock = C.dockS - S.s;
+    var steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    var slip = S.slip, sp = S.sp, k;
+    var rud = tanker().handling * (1 + 0.15 * upLevel('rudder'));
+    // boost: W spends what drifting earned
+    var boosting = keys.up && G.boost > 0 && S.spin <= 0;
+    if (boosting && !G.boosting) { sfx('boost'); quip('boost'); }
+    G.boosting = boosting;
+    if (boosting) G.boost = Math.max(0, G.boost - 30 * dt);
+    // throttle: no automatic slowing down, the helm decides when to stop
+    var target = boosting ? boostSpeed() : cruiseSpeed();
+    if (S.burst > 0) { target += 4; S.burst -= dt; }
+    if (keys.down) target = (vF > 0.6 || toDock < 70) ? 0 : -3;   // holding the brake at a standstill backs up, except at the berth
+    var accel = target > vF ? (boosting ? 10 : 6.5 + upLevel('engine')) : (keys.down ? 10 : 4);
+    vF += clamp(target - vF, -accel * dt, accel * dt);
+    // drift initiation: tap the brake with the rudder over at speed and the stern breaks loose
+    if (keys.down && !S.downPrev && steer !== 0 && sp > 10 && S.spin <= 0) { S.kick = 0.5; S.w += steer * 0.8 * rud; sfx('scrape'); }
+    S.downPrev = keys.down;
+    // lateral grip: tight when tracking straight, loose once the stern is out, almost none during the kick
+    var grip = lerp(1.8, 0.7, smooth((slip - 0.15) / 0.5));
+    if (S.kick > 0) { grip = 0.3; S.kick -= dt; }
+    vL *= Math.max(0, 1 - grip * dt);
+    if (upLevel('thruster') > 0 && Math.abs(vF) < 7) vL += steer * 0.95 * upLevel('thruster') * dt;   // bow thruster: crab sideways at low speed
+    // rudder: more authority while sliding so counter-steer actually holds the angle; a spun ship barely answers
+    var eff = 0.3 + 0.7 * Math.min(1, Math.abs(vF) / 9);
+    var authority = 2.6 * rud * (1 + 0.5 * smooth((slip - 0.2) / 0.5)) * (S.spin > 0 ? 0.2 : 1);
+    S.w += steer * authority * eff * dt * (vF < 0 ? -1 : 1);
+    if (sp > 3 && steer === 0) S.w += angDiff(Math.atan2(S.vz, S.vx), S.a) * 0.8 * dt;   // let go and the hull weathervanes back behind its own velocity
+    S.w *= Math.max(0, 1 - 2.6 * dt);
+    var wMax = (1.0 + 0.1 * upLevel('rudder')) * Math.sqrt(tanker().handling);
+    S.w = clamp(S.w, -wMax, wMax);
+    S.a += S.w * dt;
+    S.vx = vF * fx - vL * fz; S.vz = vF * fz + vL * fx;
+    S.x += S.vx * dt; S.z += S.vz * dt;
+    sp = Math.sqrt(S.vx * S.vx + S.vz * S.vz);
+    slip = sp > 3 ? Math.abs(angDiff(Math.atan2(S.vz, S.vx), S.a)) : 0;
+    S.sp = sp; S.slip = slip;
+    if (S.spin > 0) S.spin -= dt;
+    // too much angle and the ship swaps ends
+    if (slip > 1.35 && sp > 6 && S.spin <= 0) {
+      S.spin = 1.3; S.vx *= 0.55; S.vz *= 0.55; S.w *= 0.3; G.boost = Math.max(0, G.boost - 20); G.shake = 1.2;
+      endDrift(false); showMsg('РАЗВОРОТ', 1.2); sfx('late'); quip('spin');
+    }
+    // drifting: points with a combo, boost charge peaking at a healthy angle, foam off the outer side
+    var drifting = slip > 0.25 && sp > 8 && S.spin <= 0;
+    if (drifting) {
+      var prevT = S.driftT; S.driftT += dt; if (prevT < 0.6 && S.driftT >= 0.6) quip('drift');
+      var mult = S.driftT > 4 ? 3 : S.driftT > 2 ? 2 : 1;
+      var quality = smooth((slip - 0.25) / 0.3) * (1 - smooth((slip - 0.95) / 0.4));
+      var pts = sp * (0.4 + quality) * dt * 4 * mult * (boosting ? 1.5 : 1);
+      G.driftRun += pts; G.drift += pts;
+      G.boost = Math.min(boostCap(), G.boost + sp * (0.3 + quality) * dt * 1.6 * (1 + 0.25 * upLevel('boost')));
+      showMsg('ДРИФТ ×' + mult + '  +' + fmt(G.driftRun), 0.3);
+      var side = vL > 0 ? 1 : -1, n = 1 + Math.floor(slip * 3);
+      for (k = 0; k < n; k++) spawn(foam, S.x - fz * side * 4.6 + (Math.random() - 0.5) * 20 * fx, 0.3, S.z + fx * side * 4.6 + (Math.random() - 0.5) * 20 * fz, -fz * side * 3 + (Math.random() - 0.5) * 3, 1 + Math.random() * 2, fx * side * 3 + (Math.random() - 0.5) * 3, 0.9);
+    } else if (S.driftT > 0) endDrift(true);
+    if (sp > 6 && Math.random() < sp / 25) spawn(foam, S.x + fx * 14, 0.4, S.z + fz * 14, (Math.random() - 0.5) * 4 - fx * 2, 1.5 + Math.random(), (Math.random() - 0.5) * 4 - fz * 2, 0.7);
+    if (boosting || S.burst > 0) for (k = 0; k < 3; k++) spawn(foam, S.x - fx * 15 + (Math.random() - 0.5) * 6, 0.3, S.z - fz * 15 + (Math.random() - 0.5) * 6, -fx * 8 + (Math.random() - 0.5) * 4, 2 + Math.random() * 2, -fz * 8 + (Math.random() - 0.5) * 4, 0.8);
+  }
+  function endDrift(clean) { // a long drift that ends without a hit pays extra, tops up the boost and gives a short kick
+    if (clean && S.driftT > 1.2 && !S.hitInDrift) {
+      var bonus = Math.round(G.driftRun * 0.5); G.drift += bonus;
+      G.boost = Math.min(boostCap(), G.boost + 10 + 5 * S.driftT); S.burst = 1.0;
+      showMsg('ЧИСТЫЙ ВЫХОД  +' + fmt(bonus), 1.0); sfx('exit'); quip('exit');
+    }
+    S.driftT = 0; G.driftRun = 0; S.hitInDrift = false;
+  }
+
+  function impact(nx, nz, depth, hard, src) { // push the ship back along (nx,nz) and bruise the cargo by the speed into the obstacle
+    S.x += nx * depth; S.z += nz * depth;
+    var vn = S.vx * nx + S.vz * nz;
+    if (vn < 0) {
+      var v = -vn;
+      S.vx -= 1.35 * vn * nx; S.vz -= 1.35 * vn * nz; S.w *= 0.5;
+      if (v > 1.8 && G.hitCool <= 0) {
+        var dmg = Math.min(40, (v - 1.5) * (hard ? 3 : 2)) * dmgScale();
+        G.cargo = Math.max(0, G.cargo - dmg); G.hitCool = 0.6; G.shake = Math.min(2.6, 0.4 + v * 0.22);
+        G.boost = Math.max(0, G.boost - 15); S.hitInDrift = true; if (S.driftT > 0) endDrift(false);
+        sfx('hit', Math.min(1, v / 12));
+        showMsg('УДАР  −' + Math.round(dmg) + '%', 0.9); quip(src === 'boat' ? 'boat' : 'hit');
+        for (var i = 0; i < 14; i++) spawn(sparks, S.x - nx * 5, 1.5, S.z - nz * 5, nx * 6 + (Math.random() - 0.5) * 12, 3 + Math.random() * 6, nz * 6 + (Math.random() - 0.5) * 12, 0.6);
+        for (i = 0; i < 10; i++) spawn(foam, S.x - nx * 5, 0.3, S.z - nz * 5, (Math.random() - 0.5) * 8, 2 + Math.random() * 3, (Math.random() - 0.5) * 8, 0.8);
+      } else if (v <= 1.8) { S.scrape = 0.3; if (S.scrapeSnd <= 0) { S.scrapeSnd = 0.5; sfx('scrape'); } }
+    }
+  }
+
+  function roundObstacles() { // rocks, bridge pylons and both ends of every boat, as circles
+    var list = C.rocks.slice();
+    if (C.bridge) list = list.concat(C.bridge.pylons);
+    for (var i = 0; i < C.traffic.length; i++) {
+      var t = C.traffic[i], half = t.mesh.userData.half, len = t.mesh.userData.len, fx = Math.cos(t.a), fz = Math.sin(t.a);
+      for (var e = -1; e <= 1; e += 2) { var d = len / 2 - half; list.push({ x: t.x + fx * d * e, z: t.z + fz * d * e, r: half + 0.8, owner: t }); }
+    }
+    return list;
+  }
+
+  function collide() {
+    var fx = Math.cos(S.a), fz = Math.sin(S.a), i, j;
+    var obs = roundObstacles();
+    for (i = 0; i < SPTS.length; i++) {
+      var px = S.x + fx * SPTS[i], pz = S.z + fz * SPTS[i];
+      var q = nearest(C, px, pz, S.idx);
+      var limit = q.hw - PR + 1.2;
+      if (Math.abs(q.off) > limit) { var sgn = q.off > 0 ? 1 : -1; impact(sgn * Math.sin(q.a), -sgn * Math.cos(q.a), Math.abs(q.off) - limit, true, 'bank'); }
+      if (q.s > C.total - 10) impact(-Math.cos(q.a), -Math.sin(q.a), q.s - (C.total - 10), true, 'wall');
+      for (j = 0; j < obs.length; j++) {
+        var o = obs[j], dx = px - o.x, dz = pz - o.z, d = Math.sqrt(dx * dx + dz * dz), rr = o.r + PR - 0.8;
+        var tag = o.owner || o;
+        if (d < rr && d > 0.001) { impact(dx / d, dz / d, rr - d, true, o.owner ? 'boat' : 'rock'); tag.nm = true; }
+        else if (d < rr + 2.6 && S.sp > 10 && !tag.nm) { // squeezed past at speed
+          tag.nm = true; var bonus = 60 + 15 * G.job.diff; G.nearMiss += bonus; G.boost = Math.min(boostCap(), G.boost + 8);
+          showMsg('ВПРИТИРКУ  +' + bonus, 0.9); sfx('nearmiss'); quip('near');
+        }
+      }
+    }
+    if (S.scrape > 0) { S.scrape -= 0.016; G.cargo = Math.max(0, G.cargo - 2.5 * 0.016 * dmgScale()); }
+  }
+
+  function stepTraffic(dt, live) {
+    for (var i = 0; i < C.traffic.length; i++) {
+      var t = C.traffic[i];
+      t.s += t.dir * t.speed * dt;
+      var far = Math.abs(t.s - S.s) > 260;
+      if (t.dir < 0 && t.s < 60 && far) { t.s = C.runLen - 90; t.nm = false; t.horn = 0; }
+      if (t.dir > 0 && t.s > C.runLen - 50 && far) { t.s = 90; t.nm = false; t.horn = 0; }
+      var q0 = atS(C, t.s, 0), p = atS(C, t.s, t.off * q0.hw);
+      t.x = p.x; t.z = p.z; t.a = t.dir > 0 ? p.a : p.a + Math.PI;
+      t.mesh.position.set(t.x, 0, t.z); t.mesh.rotation.y = -t.a; t.mesh.rotation.z = Math.sin(G.t * 1.1 + i) * 0.02;
+      t.horn -= dt;
+      if (live) { var dx = t.x - S.x, dz = t.z - S.z; if (dx * dx + dz * dz < 70 * 70 && t.horn <= 0) { t.horn = 14; sfx('horn', t.kind === 'barge' ? 0.75 : 1.5); quip('traffic'); } }
+    }
+  }
+
+  function stepPickups() {
+    for (var i = 0; i < C.pickups.length; i++) {
+      var p = C.pickups[i]; if (p.taken) continue;
+      var dx = p.x - S.x, dz = p.z - S.z;
+      if (dx * dx + dz * dz < 8 * 8) {
+        p.taken = true;
+        if (p.kind === 'cash') { var amt = 150 + 60 * G.job.diff; G.pickupCash += amt; G.money += amt; G.earned += amt; showMsg('+' + fmt(amt) + ' ₽', 0.8); sfx('cash'); quip('cash'); }
+        else { G.cargo = Math.min(100, G.cargo + 20); showMsg('РЕМОНТ  +20%', 1.0); sfx('repair'); quip('repair'); }
+        for (var k = 0; k < 16; k++) spawn(sparks, p.x, 1.5, p.z, (Math.random() - 0.5) * 10, 4 + Math.random() * 6, (Math.random() - 0.5) * 10, 0.7);
+      }
+    }
+  }
+
+  function dockState() {
+    var d = C.dock, dx = S.x - d.x, dz = S.z - d.z, dist = Math.sqrt(dx * dx + dz * dz);
+    var da = Math.abs(angDiff(S.a, d.a)); if (da > Math.PI / 2) da = Math.PI - da;
+    return { dist: dist, da: da, sp: S.sp, ok: dist < DOCK_DIST && da < DOCK_ANGLE && S.sp < DOCK_SPEED };
+  }
+
+  function update(dt) {
+    G.t += dt;
+    stepParticles(foam, dt, 0); stepParticles(sparks, dt, 12); stepParticles(smoke, dt, -2.2);
+    if (C) animatePickups(C, dt);
+    animateShip(dt);
+    if (G.mode !== 'play') {
+      if (S) { updateWake(); placeShip(); if (C) stepTraffic(dt, false); updateAudio(G.mode === 'pause' ? S.sp : 0, 0, false); }
+      return;
+    }
+    G.time += dt; G.timeLeft -= dt; G.hitCool -= dt; S.scrapeSnd -= dt;
+    if (G.timeLeft <= 0 && !G.late) { G.late = true; sfx('late'); showMsg('ОПОЗДАНИЕ  ·  оплата вдвое меньше', 2.2); quip('late'); }
+    var q = nearest(C, S.x, S.z, S.idx); S.idx = q.i; S.s = q.s;
+    stepShip(dt);
+    stepTraffic(dt, true);
+    collide();
+    stepPickups();
+    q = nearest(C, S.x, S.z, S.idx); S.idx = q.i; S.s = q.s;
+    placeShip(); updateWake();
+    updateAudio(S.sp, S.slip, G.boosting);
+    if (G.cargo <= 0) { fail(); return; }
+    var ds = dockState();
+    var toDock = C.dockS - S.s;
+    if (!G.saidApproach && toDock < 230) { G.saidApproach = true; quip('approach'); }
+    if (C.bridge && !G.saidBridge && S.s > C.bridge.s - 70) { G.saidBridge = true; quip('bridge'); }
+    if (toDock < 60 + ds.sp * 5 && toDock > -20 && ds.sp > 4 && !ds.ok) showMsg('ТОРМОЗИ', 0.3);
+    var col = ds.ok ? 0x6fdc8c : (ds.dist < 40 ? 0xffb347 : 0xffffff);
+    dockMarker.material.color.setHex(col); dockFrame.material.color.setHex(col);
+    if (ds.ok) { if (G.holdT === 0) sfx('tick'); G.holdT += dt; if (G.holdT >= DOCK_HOLD) delivered(ds); } else G.holdT = 0;
+  }
+
+  // ---------- the radio: one short clip from the captain per event, no queue ----------
+  var VOICE = {
+    oo: 'О-о. Мегалюль. О-о.', mega2: 'О-о, Мегалюль, Мегалюль.', corp: 'О-о, Мегалюль корпорейшн.',
+    extra: 'Экстра причаливание. Мегалюль по заказу.', moor: 'Причалюсь. Причалюсь.', drill: 'Да, могу забуриться винтами.',
+    spoil: 'Испортится! Груз испортится!', kaknetu: 'Как нету? Убрали, что ли, меня?', vsplyt: 'А как мне всплыть тогда?',
+    funny: 'Что смешного?', pochemu: 'А почему меня нету в списках? Почему?', neslyshu: 'Не слышу вас. Как слышно, второй?',
+    neponyal: 'Не понял.', kuda: 'Куда? Я вам уже сколько раз звонил!', notfirst: 'Мы с вами работаем не первый год. Я капитан судна.',
+    cruiser: 'Крейсер у меня!', cruiserStop: 'Крейсер стоит. Ты знаешь, что делать.', propadaet: 'Пропадает! Пропадает!',
+    kushat: 'Мне тоже надо за что-то кушать.', bystree: 'Надо быстрее причалиться ко второму!', udobrenie: 'Удобрение. Китайский, нормальный, чистый.',
+    ktoeto: 'Кто это? Алло.', plokho: 'Да, да, плохо слышно.', fifty4: 'Пятьдесят четвёртый. А как слышно?',
+    zhdat: 'Ждать. — Кого?', danilkin: 'Капитан Данилкин беспокоит.', ktomega: 'Кто мега? Кто?',
+    bye: 'Всё, всего доброго. Мегалюль.', davai: 'Давай. Мегалюль.', vygruzh: 'Сейчас буду выгружаться.',
+    budesh: 'Выгружаться будешь? — Да. Да.', agentsbit: 'Ну, агент сбит.', pohchamp: 'Похчамп. Похчамп.',
+    dada: 'Да-да. Да-да.', stoyu: 'Как не значится? Я здесь стою, у меня десять цистерн здесь!',
+    hello: 'Здравствуйте. Здравствуйте.', hello1: 'Здравствуйте.', gadza: 'Три, четыре, пять, ноль, Д!',
+    padaem: 'Мы падаем! Падаем!', vycherk: 'Понял, вычёркиваю.', nuvse: 'Ну всё, тогда давай.', dadada: 'Да-да-да-да, да я, да.'
+  };
+  var DISP = { ktomega: 1, zhdat: 1, neponyal: 1, budesh: 1, vycherk: 1 };
+  var LINES = {
+    start: ['hello', 'danilkin', 'ktomega', 'mega2', 'corp', 'hello1'],
+    approach: ['zhdat', 'bystree', 'moor'],
+    drift: ['oo', 'mega2', 'corp', 'extra', 'moor', 'drill', 'dadada'],
+    exit: ['pohchamp', 'pohchamp', 'extra', 'dadada', 'budesh', 'dada'],
+    spin: ['vsplyt', 'neponyal', 'kaknetu', 'ktoeto'],
+    hit: ['spoil', 'pochemu', 'kaknetu', 'funny', 'neslyshu', 'propadaet', 'cruiser'],
+    boat: ['cruiser', 'notfirst', 'kuda', 'ktoeto', 'agentsbit'],
+    near: ['notfirst', 'extra', 'dada'],
+    cash: ['kushat', 'dadada', 'dada'],
+    repair: ['udobrenie', 'dada'],
+    traffic: ['plokho', 'fifty4', 'ktoeto', 'neslyshu'],
+    boost: ['bystree', 'gadza', 'dadada'],
+    bridge: ['oo', 'cruiser'],
+    late: ['pochemu', 'zhdat', 'propadaet'],
+    dock: ['bye', 'davai', 'nuvse', 'vygruzh', 'budesh'],
+    fail: ['vycherk', 'padaem', 'cruiserStop', 'spoil', 'propadaet', 'stoyu']
+  };
+  var COOL = { hit: 4, boat: 6, drift: 12, exit: 10, spin: 6, near: 10, cash: 8, repair: 5, traffic: 20, boost: 20, bridge: 30, approach: 60, late: 60, dock: 0, fail: 0, start: 0 };
+  var CHANCE = { hit: 0.8, drift: 0.75, exit: 0.6, near: 0.5, cash: 0.5, boat: 0.8, traffic: 0.6, boost: 0.7, repair: 0.8, spin: 0.9 };   // the rest always speak
+  var GLOBAL_GAP = 4, SAME_CLIP_GAP = 30;   // seconds between any two lines, and before the same clip may come back
+  var lastAny = -99, lastKey = {};
+  var radioEl = document.getElementById('radio'), radioWho = document.getElementById('radioWho'), radioText = document.getElementById('radioText');
+  var radioT = 0, radioDur = 0, lastLine = {}, catT = {};
+  var voicePool = {}, current = null;
+  function voiceFor(key) { var a = voicePool[key]; if (!a) { a = new Audio('voice/' + key + '.mp3'); a.preload = 'auto'; voicePool[key] = a; } return a; }
+  function preloadVoice() { for (var k in VOICE) voiceFor(k); }
+  function playVoice(key) {
+    if (muted) return false;
+    var a = voiceFor(key);
+    if (current && current !== a) { try { current.pause(); current.currentTime = 0; } catch (e) {} }
+    current = a;
+    try { a.currentTime = 0; var p = a.play(); if (p && p.catch) p.catch(function () {}); return true; } catch (e) { return false; }
+  }
+  function voiceActive() { return !!(current && !current.paused && !current.ended); }
+  function stopVoice() { if (current) { try { current.pause(); } catch (e) {} } current = null; }
+  function quip(cat) {
+    var forced = cat === 'dock' || cat === 'fail' || cat === 'start';
+    if (!forced) {
+      if (G.t - lastAny < GLOBAL_GAP || voiceActive()) return;            // one thing at a time, never over a line still playing
+      if (catT[cat] !== undefined && G.t - catT[cat] < (COOL[cat] || 5)) return;
+      var chance = CHANCE[cat] !== undefined ? CHANCE[cat] : 1;
+      if (Math.random() > chance) { catT[cat] = G.t - (COOL[cat] || 5) * 0.5; return; }   // skipped this time, try again a bit later
+    }
+    catT[cat] = G.t;
+    var arr = LINES[cat]; if (!arr || !arr.length) return;
+    var fresh = arr.filter(function (k) { return lastKey[k] === undefined || G.t - lastKey[k] > SAME_CLIP_GAP; });
+    if (!fresh.length) { if (!forced) return; fresh = arr; }
+    var key = fresh[Math.floor(Math.random() * fresh.length)];
+    lastKey[key] = G.t; lastAny = G.t;
+    showRadio(key);
+  }
+  function showRadio(key) {
+    var text = VOICE[key]; if (!text) return;
+    radioEl.hidden = true; void radioEl.offsetWidth;   // restart the slide-in
+    radioEl.className = DISP[key] ? 'disp' : '';
+    radioWho.textContent = DISP[key] ? 'Диспетчер порта' : 'Капитан Данилкин';
+    radioText.textContent = text;
+    radioEl.hidden = false; radioT = 0; radioDur = 1.6 + text.length * 0.04;
+    if (!playVoice(key)) sfx('radio');
+  }
+  function stepRadio(dt) { if (!radioEl.hidden) { radioT += dt; if (radioT >= radioDur && !voiceActive()) radioEl.hidden = true; } }
+
+  // ---------- HUD and messages ----------
+  var el = {};
+  ['hudLevel', 'hudDist', 'hudCargoPct', 'hudCargo', 'hudBoost', 'boostTile', 'hudSpeed', 'hudTime', 'hudMoney', 'msg', 'overlay'].forEach(function (id) { el[id] = document.getElementById(id); });
+  var cache = {}, msgT = 0;
+  function setText(k, v) { if (cache[k] !== v) { cache[k] = v; el[k].textContent = v; } }
+  function updateHud() {
+    setText('hudLevel', G.job ? G.job.port : '—');
+    setText('hudDist', S ? fmt(Math.max(0, C.dockS - S.s)) + ' м' : '');
+    var cp = Math.round(G.cargo);
+    setText('hudCargoPct', cp + '%');
+    if (cache.cargoBar !== cp) { cache.cargoBar = cp; el.hudCargo.style.width = cp + '%'; el.hudCargo.style.background = cp > 60 ? '#6fdc8c' : cp > 30 ? '#f5c044' : '#f4705f'; }
+    var bp = Math.round(G.boost / boostCap() * 100);
+    if (cache.boost !== bp) { cache.boost = bp; el.hudBoost.style.width = bp + '%'; el.boostTile.classList.toggle('full', bp >= 99); }
+    setText('hudSpeed', S ? Math.round(S.sp * 1.94) + ' уз' : '');
+    var tl = Math.max(0, G.timeLeft);
+    setText('hudTime', G.mode === 'title' ? '—' : fmtTime(tl));
+    var tcls = 'value' + (G.late ? ' late' : tl < 30 ? ' warn' : '');
+    if (cache.tcls !== tcls) { cache.tcls = tcls; el.hudTime.className = tcls; }
+    setText('hudMoney', fmt(G.money) + ' ₽');
+  }
+  function showMsg(text, dur) { if (el.msg.textContent !== text) el.msg.textContent = text; el.msg.classList.add('show'); msgT = dur; }
+  function stepMsg(dt) { if (msgT > 0) { msgT -= dt; if (msgT <= 0) el.msg.classList.remove('show'); } }
+
+  // ---------- screens ----------
+  function bindActions(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('[data-action]'), function (b) {
+      b.addEventListener('click', function () { doAction(b.getAttribute('data-action'), b.getAttribute('data-key')); });
+    });
+  }
+  function show(html) { el.overlay.innerHTML = html; el.overlay.hidden = false; el.overlay.scrollTop = 0; bindActions(el.overlay); }
+  function hide() { el.overlay.hidden = true; el.overlay.innerHTML = ''; }
+  function doAction(action, key) {
+    if (action === 'primary') primaryAction();
+    else if (action === 'hub') hubScreen(key || null);
+    else if (action === 'take') takeJob(parseInt(key, 10));
+    else if (action === 'pick') pickShip(key);
+    else if (action === 'buyship') buyShip(key);
+    else if (action === 'tune') buyTune(key);
+    else if (action === 'build') build(key);
+    else if (action === 'stock') buyStock(key);
+    else if (action === 'reroll') reroll();
+    else if (action === 'new') newGame();
+    else if (action === 'continue') continueGame();
+  }
+  var isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  function btn(label, action, alt, key) { return '<button class="btn' + (alt ? ' alt' : '') + '" type="button" data-action="' + action + '"' + (key != null ? ' data-key="' + key + '"' : '') + '>' + label + '</button>'; }
+  function spaceHint() { return isTouch ? '' : '<div class="hint">или <kbd>Пробел</kbd></div>'; }
+  function pips(l, max) { var h = ''; for (var k = 0; k < max; k++) h += '<span class="' + (k < l ? 'on' : 'off') + '">●</span>'; return '<span class="pips">' + h + '</span>'; }
+  function barRow(name, v) { return '<span>' + name + '</span><div class="bar"><i style="width:' + Math.round(clamp(v, 0, 1) * 100) + '%"></i></div>'; }
+  function keepScroll(root, fn) { var st = root.scrollTop; fn(); root.scrollTop = st; }
+
+  function titleScreen() {
+    G.mode = 'title';
+    var save = loadGame();
+    show('<div class="card"><h1>МЕГАЛЮЛЬ</h1><div class="sub">ОАО «Мегалюль» · капитан Данилкин · десять цистерн</div>' +
+      '<p>Цех варит удобрение, контора берёт заказы, танкер везёт. Ваше дело — вписываться в повороты и не ломать цистерны. Встречные лодки держатся слева, баржи — справа, под мостом тесно. Дрифт заряжает форсаж, чистый выход из заноса даёт премию, за удары её отнимают. Заработок идёт на верфь: постройки, новые танкеры, доработки.</p>' +
+      '<div class="rules"><b><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></b><span>руль, в заносе контрруль держит угол</span>' +
+      '<b><kbd>S</kbd> / <kbd>↓</kbd></b><span>тормоз; короткий тычок с рулём срывает корму в занос</span>' +
+      '<b><kbd>W</kbd> / <kbd>↑</kbd></b><span>форсаж, пока есть заряд</span>' +
+      '<b><kbd>P</kbd> · <kbd>M</kbd></b><span>пауза · звук</span></div>' +
+      (isTouch ? '<p class="hint">На экране: левая и правая половины — руль, кнопка СТОП — тормоз.</p>' : '') +
+      (save ? btn('Продолжить · ' + (save.v ? save.rank + '-й разряд · рейсов ' + save.done : 'рейс №' + save.level) + ' · ' + fmt(save.money || 0) + ' ₽', 'continue') + btn('Новая карьера', 'new', true) : btn('На верфь', 'new')) +
+      spaceHint() + '<div id="olTitle"></div></div>');
+    Online.panel(document.getElementById('olTitle'), { game: '3d', mode: 'title' });
+  }
+  function newGame() { clearSave(); resetCareer(); G.lastOutcome = 'docked'; saveGame(); hubScreen(); }
+  function continueGame() { var s = loadGame(); if (s) applySave(s); else resetCareer(); G.lastOutcome = 'docked'; hubScreen(); }
+
+  // ---------- the shipyard hub: four rooms on a quay, a panel per room, the plant ticking in real time ----------
+  var hubEl = document.getElementById('hub'), hubTop = document.getElementById('hubTop'), hubPanel = document.getElementById('hubPanel'), hubFoot = document.getElementById('hubFoot');
+  var hubTimer = null, hubStockShown = -1;
+  var ROOM_BY_KEY = {}; for (var ri = 0; ri < ROOMS.length; ri++) ROOM_BY_KEY[ROOMS[ri].key] = ROOMS[ri];
+  Array.prototype.forEach.call(hubEl.querySelectorAll('.room'), function (g) {
+    var room = g.getAttribute('data-room');
+    g.addEventListener('click', function () { hubScreen(room); });
+    g.addEventListener('keydown', function (e) { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); hubScreen(room); } });
+  });
+  function hubScreen(room) {
+    accrue();
+    G.mode = 'hub'; G.room = room || null;
+    hide(); hubEl.hidden = false;
+    if (!hubTimer) hubTimer = setInterval(hubRefresh, 1000);
+    paintHub();
+    if (G.room) { hubPanel.innerHTML = '<div class="card">' + panelHtml(G.room) + '</div><button class="close" type="button" data-action="hub" aria-label="Закрыть">✕</button>'; hubPanel.hidden = false; hubPanel.scrollTop = 0; bindActions(hubPanel); }
+    else { hubPanel.hidden = true; hubPanel.innerHTML = ''; }
+    hubStockShown = stockWhole();
+  }
+  function closeHub() { hubEl.hidden = true; hubPanel.hidden = true; hubPanel.innerHTML = ''; if (hubTimer) { clearInterval(hubTimer); hubTimer = null; } }
+  function hubRefresh() { // once a second while the hub is open: the plant works, numbers move, the board wakes up when stock allows
+    if (G.mode !== 'hub') return;
+    accrue(); paintHub();
+    var whole = stockWhole();
+    if (G.room === 'plant' || G.room === 'store') { var n = hubPanel.querySelector('#prodNow'); if (n) n.innerHTML = prodNowHtml(); }
+    if (G.room === 'office' && whole !== hubStockShown) keepScroll(hubPanel, function () { hubScreen('office'); });
+    hubStockShown = whole;
+  }
+  function setSvgText(id, text) { var n = document.getElementById(id); if (n && n.textContent !== text) n.textContent = text; }
+  function paintHub() {
+    var t = tanker(), cap = storeCap(), whole = stockWhole(), need = xpNeed(G.rank);
+    hubTop.innerHTML = '<div class="tile brand">ВЕРФЬ</div>' +
+      '<div class="tile"><span class="label">На счету</span><span class="value">' + fmt(G.money) + ' ₽</span></div>' +
+      '<div class="tile"><span class="label">Разряд ' + G.rank + '</span><span class="value" style="font-size:13px">' + G.xp + ' / ' + need + '<span class="xp"><i style="width:' + Math.round(G.xp / need * 100) + '%"></i></span></span></div>' +
+      '<div class="tile stock"><span class="label">Удобрение</span><span class="value">' + whole + ' / ' + cap + ' цист.</span></div>' +
+      '<div class="tile optional"><span class="label">Танкер</span><span class="value" style="font-size:15px">' + t.name + '</span></div>' +
+      '<div class="tile optional"><span class="label">Рейсов</span><span class="value">' + G.done + '</span></div>';
+    var dots = function (key) { var l = yardLevel(key), s = ''; for (var k = 0; k < 3; k++) s += (k < l ? '●' : '○') + (k < 2 ? ' ' : ''); return s; };
+    setSvgText('lvlOffice', dots('office')); setSvgText('lvlPlant', dots('plant')); setSvgText('lvlStore', dots('store')); setSvgText('lvlDock', dots('dock'));
+    setSvgText('noteOffice', board().length + ' заказ' + (board().length >= 5 ? 'ов' : 'а') + ' · регионов ' + regionsOpen());
+    setSvgText('notePlant', whole >= cap ? 'склад полон, цех стоит' : 'цистерна за ' + prodRate() + ' с');
+    setSvgText('noteStore', whole + ' из ' + cap + ' цистерн');
+    setSvgText('noteDock', t.name + ' · ' + tankWord(t.tanks));
+    var filled = Math.round(G.stock / cap * 5);
+    for (var i = 1; i <= 5; i++) { var tk = document.getElementById('hubTank' + i); if (tk) tk.setAttribute('fill', i <= filled ? '#ffb347' : '#5a5f6a'); }
+    var hull = document.getElementById('hubHull'), tanks = document.getElementById('hubTanks');
+    if (hull) hull.setAttribute('fill', '#' + ('000000' + t.hull.toString(16)).slice(-6));
+    if (tanks) { tanks.setAttribute('stroke', '#' + ('000000' + t.band.toString(16)).slice(-6)); tanks.setAttribute('fill', '#' + ('000000' + t.tanksCol.toString(16)).slice(-6)); }
+    Array.prototype.forEach.call(hubEl.querySelectorAll('.room'), function (g) { g.classList.toggle('on', g.getAttribute('data-room') === G.room); });
+    var foot = (isTouch ? 'Нажмите на постройку.' : 'Нажмите на постройку. Пробел берёт первый доступный контракт, Esc закрывает окно.') + ' ' + Online.feedbackLink('3d');
+    if (hubFoot.innerHTML !== foot) hubFoot.innerHTML = foot;
+  }
+  function roomHead(key) {
+    var r = ROOM_BY_KEY[key], l = yardLevel(key), max = l >= 3, p = max ? 0 : r.prices[l - 1], rk = max ? 0 : r.rank[l - 1], ok = !max && G.rank >= rk && G.money >= p;
+    return '<h2>' + r.name + ' ' + pips(l, 3) + '</h2><div class="sub">' + r.fx(l) + '</div><p class="hint" style="margin-top:0">' + r.desc + '</p>' +
+      '<div class="panel-head">' + (max ? '<span class="item-fx">Максимальный уровень</span>' : '<span class="item-fx">Следующий уровень: ' + r.fx(l + 1) + '</span>' +
+      '<button class="buy" type="button" data-action="build" data-key="' + key + '"' + (ok ? '' : ' disabled') + '>' + (G.rank < rk ? 'Нужен ' + rk + '-й разряд · ' + fmt(p) + ' ₽' : 'Улучшить · ' + fmt(p) + ' ₽') + '</button>') + '</div>';
+  }
+  function panelHtml(room) {
+    if (room === 'office') return roomHead('office') + jobsHtml();
+    if (room === 'plant') return roomHead('plant') + '<div id="prodNow">' + prodNowHtml() + '</div>';
+    if (room === 'store') return roomHead('store') + '<div id="prodNow">' + prodNowHtml() + '</div>';
+    return roomHead('dock') + fleetHtml();
+  }
+  function prodNowHtml() {
+    var cap = storeCap(), whole = stockWhole(), full = G.stock >= cap - 1e-6, frac = full ? 1 : G.stock - whole, rate = prodRate();
+    var toFill = Math.max(0, cap - whole), fillAll = toFill * FILL_PRICE;
+    var h = '<div class="prod">' +
+      '<div class="item"><div class="item-head"><b>На складе</b></div><div class="big">' + whole + ' / ' + cap + '</div><p>' + (full ? 'Склад полон, цех стоит.' : 'Следующая цистерна через ' + Math.ceil((1 - frac) * rate) + ' с.') + '</p><div class="bar"><i style="width:' + Math.round(frac * 100) + '%"></i></div></div>' +
+      '<div class="item"><div class="item-head"><b>Цех</b></div><div class="big">' + rate + ' с</div><p>на цистерну, ' + Math.round(3600 / rate) + ' в час. Работает в рейсе и пока игра закрыта.</p></div>' +
+      '<div class="item"><div class="item-head"><b>До полного склада</b></div><div class="big">' + (full ? '—' : fmtTime(toFill * rate - frac * rate)) + '</div><p>' + (full ? 'Можно расширить склад или взять заказ.' : 'при нынешнем цехе') + '</p></div></div>' +
+      '<p class="hint">Не хочется ждать: удобрение можно докупить у соседей по ' + FILL_PRICE + ' ₽ за цистерну.</p><div>' +
+      [1, 5].map(function (n) { var can = !full && G.money >= n * FILL_PRICE && toFill >= n; return '<button class="btn alt" type="button" data-action="stock" data-key="' + n + '"' + (can ? '' : ' disabled') + '>+' + n + ' · ' + fmt(n * FILL_PRICE) + ' ₽</button>'; }).join('') +
+      '<button class="btn alt" type="button" data-action="stock" data-key="full"' + (!full && G.money >= fillAll ? '' : ' disabled') + '>До полного · ' + fmt(fillAll) + ' ₽</button></div>';
+    return h;
+  }
+  function jobsHtml() {
+    var list = board(), t = tanker(), h = '<div class="shop-grid">';
+    for (var i = 0; i < list.length; i++) {
+      var j = list[i], R = ROUTE[j.region], K = KINDS[j.kind], why = canTake(j);
+      var km = ((900 + 260 * j.diff) * j.lenK / 1000).toFixed(1).replace('.', ',');
+      var retry = G.job && G.job.id === j.id && G.lastOutcome === 'fail';
+      var tag = K.tag ? '<span class="tag ' + K.tag + '">' + K.tagText + '</span>' : '';
+      h += '<div class="item' + (why ? ' locked' : '') + '"><div class="item-head"><b>' + R.name + ' · ' + j.port + '</b>' + pips(Math.min(5, Math.ceil(j.diff / 3)), 5) + '</div>' +
+        '<p><b>' + K.name + ' · ' + tankWord(j.amount) + '</b>' + tag + '<br>' + K.note + '</p>' +
+        '<div class="pay">' + fmt(jobPay(j)) + ' ₽</div><div class="meta">' + km + ' км · ' + THEMES[j.theme].name + (j.bridge ? ' · мост' : '') + ' · опыт +' + j.xp + '</div>' +
+        '<button class="buy" type="button" data-action="take" data-key="' + i + '"' + (why ? ' disabled' : '') + '>' + (why || (retry ? 'Повторить рейс' : 'Взять контракт')) + '</button></div>';
+    }
+    h += '</div><p class="hint">Танкер «' + t.name + '» берёт до ' + tankWord(t.tanks) + ' за рейс. Доска обновляется после каждой доставки' + (yardLevel('office') >= 3 ? ', а контора 3-го уровня может сменить её за 300 ₽' : '') + '.</p>';
+    if (yardLevel('office') >= 3) h += '<button class="btn alt" type="button" data-action="reroll"' + (G.money >= 300 ? '' : ' disabled') + '>Другие заказы · 300 ₽</button>';
+    return h;
+  }
+  function fleetHtml() {
+    var t = tanker(), dock = yardLevel('dock'), h = '<div class="shop-grid">', i;
+    for (i = 0; i < TANKERS.length; i++) {
+      var s = TANKERS[i], owned = G.fleet.indexOf(s.id) >= 0, sel = s.id === G.tanker, fits = s.cls <= dock, can = !owned && fits && G.money >= s.price;
+      h += '<div class="item' + (sel ? ' sel' : '') + (!owned && !fits ? ' locked' : '') + '"><div class="item-head"><b>' + s.name + '</b><span class="tag">' + s.cls + ' класс · ' + s.tanks + ' цист.</span></div><p>' + s.desc + '</p>' +
+        '<div class="stat">' + barRow('скорость', (s.cruise - 18) / 10) + barRow('манёвр', (s.handling - 0.6) / 0.8) + barRow('прочность', (1.4 - s.armour) / 0.9) + barRow('форсаж', (s.boostCap - 0.8) / 0.7) + barRow('цистерны', s.tanks / 20) + '</div>' +
+        (sel ? '<div class="item-fx">у причала</div>' : owned ? '<button class="buy" type="button" data-action="pick" data-key="' + s.id + '">Поставить к причалу</button>' :
+          '<button class="buy" type="button" data-action="buyship" data-key="' + s.id + '"' + (can ? '' : ' disabled') + '>' + (fits ? 'Купить · ' + fmt(s.price) + ' ₽' : 'Нужен док ' + s.cls + '-го уровня') + '</button>') + '</div>';
+    }
+    h += '</div><h2 class="sub2">Доработки · ' + t.name + '</h2><div class="shop-grid">';
+    for (i = 0; i < TUNING.length; i++) {
+      var u = TUNING[i], l = upLevel(u.key), max = l >= 3, capped = !max && l >= dock, p = max ? 0 : tunePrice(u, l), ok = !max && !capped && G.money >= p;
+      h += '<div class="item"><div class="item-head"><b>' + (i + 1) + '. ' + u.name + '</b>' + pips(l, 3) + '</div><p>' + u.desc + '</p>' +
+        '<div class="item-fx">' + u.fx(l) + (max ? '' : '  →  ' + u.fx(l + 1)) + '</div>' +
+        '<button class="buy" type="button" data-action="tune" data-key="' + u.key + '"' + (ok ? '' : ' disabled') + '>' + (max ? 'Максимум' : capped ? 'Нужен док ' + (l + 1) + '-го уровня' : 'Купить · ' + fmt(p) + ' ₽') + '</button></div>';
+    }
+    return h + '</div>' + (isTouch ? '' : '<div class="hint">цифры <kbd>1</kbd>–<kbd>5</kbd> покупают доработки</div>');
+  }
+  function takeJob(i) {
+    accrue();
+    var j = board()[i]; if (!j) return;
+    if (canTake(j)) { sfx('deny'); hubScreen('office'); return; }
+    G.stock -= j.amount; G.job = j; G.lastOutcome = 'docked'; saveGame(); startLevel();
+  }
+  function retryJob() { // the lost cargo is gone, a new batch goes on board
+    accrue();
+    if (!G.job || canTake(G.job)) { hubScreen('office'); return; }
+    G.stock -= G.job.amount; saveGame(); startLevel();
+  }
+  function pickShip(id) { if (G.fleet.indexOf(id) < 0 || id === G.tanker) return; G.tanker = id; saveGame(); saveHot(); keepScroll(hubPanel, function () { hubScreen('dock'); }); }
+  function buyShip(id) {
+    var s = null; for (var i = 0; i < TANKERS.length; i++) if (TANKERS[i].id === id) s = TANKERS[i];
+    if (!s || G.fleet.indexOf(id) >= 0 || s.cls > yardLevel('dock') || G.money < s.price) { sfx('deny'); return; }
+    G.money -= s.price; G.fleet.push(id); G.tanker = id; if (!G.tune[id]) G.tune[id] = {}; sfx('cash'); saveGame(); saveHot(); keepScroll(hubPanel, function () { hubScreen('dock'); });
+  }
+  function buyTune(key) {
+    var u = null; for (var i = 0; i < TUNING.length; i++) if (TUNING[i].key === key) u = TUNING[i];
+    if (!u) return;
+    var l = upLevel(key); if (l >= 3 || l >= yardLevel('dock')) { sfx('deny'); return; }
+    var p = tunePrice(u, l);
+    if (G.money < p) { sfx('deny'); return; }
+    G.money -= p; tune()[key] = l + 1; sfx('cash'); saveGame(); saveHot(); keepScroll(hubPanel, function () { hubScreen('dock'); });
+  }
+  function build(key) {
+    var r = ROOM_BY_KEY[key]; if (!r) return;
+    var l = yardLevel(key); if (l >= 3) return;
+    if (G.rank < r.rank[l - 1] || G.money < r.prices[l - 1]) { sfx('deny'); return; }
+    accrue(); G.money -= r.prices[l - 1]; G.yard[key] = l + 1; if (key === 'office') G.board = null;   // a bigger office redraws the board at once
+    sfx('cash'); saveGame(); saveHot(); keepScroll(hubPanel, function () { hubScreen(key); });
+  }
+  function buyStock(key) {
+    accrue();
+    var cap = storeCap(), room = Math.max(0, cap - stockWhole()), n = key === 'full' ? room : Math.min(room, parseInt(key, 10) || 0);
+    if (n <= 0 || G.money < n * FILL_PRICE) { sfx('deny'); return; }
+    G.money -= n * FILL_PRICE; G.stock = Math.min(cap, G.stock + n); sfx('cash'); saveGame(); saveHot(); keepScroll(hubPanel, function () { hubScreen(G.room); });
+  }
+  function reroll() { if (yardLevel('office') < 3 || G.money < 300) { sfx('deny'); return; } G.money -= 300; newBoard(); sfx('cash'); saveGame(); hubScreen('office'); }
+
+  function startLevel() {
+    closeHub(); applyTanker(tanker());
+    C = buildCourse(G.job); buildWorld(C); resetShip();
+    G.time = 0; G.timeLeft = deadline(C); G.late = false; G.cargo = 100; G.drift = 0; G.driftRun = 0; G.boost = 0; G.boosting = false;
+    G.nearMiss = 0; G.pickupCash = 0; G.holdT = 0; G.hitCool = 0; G.shake = 0; G.mode = 'play'; hide(); sfx('start');
+    stopVoice(); preloadVoice(); G.saidBridge = false; G.saidApproach = false; quip('start');
+    showMsg(ROUTE[G.job.region].name + '  ·  ' + G.job.port + '  ·  ' + G.theme.name + '  ·  ' + fmt(C.dockS) + ' м', 2.4);
+  }
+  function delivered(ds) {
+    G.mode = 'docked'; G.lastOutcome = 'docked'; sfx('dock'); stopVoice(); quip('dock');
+    var j = G.job, base = jobPay(j), cargoPay = Math.round(base * G.cargo / 100 * (G.late ? 0.5 : 1));
+    var timeBonus = Math.round(Math.max(0, G.timeLeft) * 12);
+    var driftBonus = Math.round(G.drift), nm = Math.round(G.nearMiss);
+    var total = cargoPay + timeBonus + driftBonus + nm;
+    var stars = G.cargo >= 90 ? 3 : G.cargo >= 60 ? 2 : 1, starHtml = '';
+    var xp = Math.round(j.xp * (0.5 + 0.5 * G.cargo / 100) * (G.late ? 0.7 : 1)) + 10 * stars + Math.round(driftBonus / 60);
+    G.money += total; G.earned += total; G.done += 1;
+    var ups = addXp(xp); newBoard(); accrue(); saveGame();
+    for (var i = 0; i < 3; i++) starHtml += i < stars ? '★' : '<span class="dim">★</span>';
+    show('<div class="card"><div class="stars">' + starHtml + '</div><h2>Груз доставлен</h2><div class="sub">' + ROUTE[j.region].name + ' · ' + j.port + ' · ' + tankWord(j.amount) + ' · груз ' + Math.round(G.cargo) + '% · ' + fmtTime(G.time) + (G.late ? ' · с опозданием' : '') + '</div>' +
+      '<div class="score-table"><span>Оплата за груз' + (G.late ? ' (×0,5 за опоздание)' : '') + '</span><span>' + fmt(cargoPay) + '</span>' +
+      '<span>Запас времени</span><span>' + fmt(timeBonus) + '</span><span>Премия за дрифт</span><span>' + fmt(driftBonus) + '</span>' +
+      '<span>Впритирку</span><span>' + fmt(nm) + '</span>' + (G.pickupCash ? '<span>Бочки по пути (уже на счету)</span><span>' + fmt(G.pickupCash) + '</span>' : '') +
+      '<span class="total">Итого</span><span class="total">' + fmt(total) + ' ₽</span></div>' +
+      '<p class="hint">Опыт +' + xp + ' · на счету ' + fmt(G.money) + ' ₽ · рейсов ' + G.done + ' · на складе ' + tankWord(stockWhole()) + '</p>' +
+      (ups ? '<div class="rankup">Новый разряд: ' + G.rank + '-й. На верфи открылись новые улучшения.</div>' : '') +
+      '<div id="olResult"></div>' + btn('На верфь', 'primary') + spaceHint() + '</div>');
+    Online.panel(document.getElementById('olResult'), { game: '3d', mode: 'result', score: G.earned, level: G.done });
+    saveHot();
+  }
+  function fail() {
+    G.mode = 'fail'; G.lastOutcome = 'fail'; shipG.visible = false; G.shake = 3; sfx('fail'); saveGame(); stopVoice(); quip('fail');
+    for (var i = 0; i < 60; i++) spawn(sparks, S.x, 2, S.z, (Math.random() - 0.5) * 30, 4 + Math.random() * 14, (Math.random() - 0.5) * 30, 1.2);
+    show('<div class="card"><h2>Груз потерян</h2><div class="sub">цистерны пусты · ' + fmt(Math.max(0, C.dockS - S.s)) + ' м до порта</div>' +
+      '<p>Берег, камни и чужие борта оказались крепче. Партия пропала: на повтор рейса цех нальёт новую, деньги за прошлые рейсы и бочки остаются, на верфи можно поставить кранцы или взять заказ полегче.</p>' +
+      btn('На верфь', 'hub', true) + btn('Повторить рейс', 'primary') + spaceHint() + '<div class="ol-foot">' + Online.feedbackLink('3d') + '</div></div>');
+    saveHot();
+  }
+  function primaryAction() {
+    if (G.mode === 'title') { if (loadGame()) continueGame(); else newGame(); }
+    else if (G.mode === 'hub') { accrue(); var list = board(); for (var i = 0; i < list.length; i++) if (!canTake(list[i])) { takeJob(i); return; } if (!G.room) hubScreen('plant'); }
+    else if (G.mode === 'docked') hubScreen();
+    else if (G.mode === 'fail') retryJob();
+    else if (G.mode === 'pause') togglePause();
+  }
+  function togglePause() {
+    if (G.mode === 'play') { G.mode = 'pause'; show('<div class="card"><h2>Пауза</h2>' + btn('Продолжить', 'primary') + spaceHint() + '<div class="ol-foot">' + Online.feedbackLink('3d') + '</div></div>'); }
+    else if (G.mode === 'pause') { G.mode = 'play'; hide(); }
+  }
+  document.addEventListener('visibilitychange', function () { if (document.hidden && G.mode === 'play') togglePause(); });
+  function saveHot() { try { if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(saveData()); } catch (e) {} }
+
+  // ---------- input ----------
+  var KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
+  window.addEventListener('keydown', function (e) {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;   // идёт ввод имени или отзыва
+    if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); return; }
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); primaryAction(); }
+    else if (e.code === 'KeyP' || e.code === 'Escape') { if (G.mode === 'hub') { if (G.room) hubScreen(); } else togglePause(); }
+    else if (e.code === 'KeyM') toggleMute();
+    else if (G.mode === 'hub' && G.room === 'dock' && /^Digit[1-5]$/.test(e.code)) buyTune(TUNING[parseInt(e.code.slice(5), 10) - 1].key);
+  });
+  window.addEventListener('keyup', function (e) { if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = false; e.preventDefault(); } });
+  window.addEventListener('blur', function () { keys.up = keys.down = keys.left = keys.right = false; });
+  Array.prototype.forEach.call(document.querySelectorAll('#touch [data-key]'), function (b) {
+    var k = b.getAttribute('data-key');
+    function on(e) { e.preventDefault(); keys[k] = true; b.classList.add('on'); }
+    function off(e) { e.preventDefault(); keys[k] = false; b.classList.remove('on'); }
+    b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
+  });
+
+  // ---------- resize and main loop ----------
+  function resize() {
+    var w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize); resize();
+  var last = 0;
+  function tick(dt) { update(dt); if (S) updateCamera(dt, false); stepMsg(dt); stepRadio(dt); updateHud(); if (G.mode !== 'hub') renderer.render(scene, camera); }   // the hub covers the view, no point drawing under it
+  function frame(ts) {
+    if (!last) last = ts;
+    var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+    tick(dt);
+    requestAnimationFrame(frame);
+  }
+  var AUTOTEST = location.hash === '#autotest';
+  function start(data) {
+    var fromHot = !!(data && (data.v || data.level));
+    if (fromHot) applySave(data); else { var s = loadGame(); if (s) applySave(s); else resetCareer(); }
+    G.job = board()[0]; applyTanker(tanker());   // the first offer makes the backdrop behind the title
+    C = buildCourse(G.job); buildWorld(C); resetShip();
+    if (fromHot) { G.mode = 'docked'; G.lastOutcome = 'docked'; show('<div class="card"><h2>Рейс прерван</h2><div class="sub">страница обновилась</div><p>Заработок, склад, флот и постройки сохранены. Заказ можно взять заново в конторе.</p>' + btn('На верфь', 'primary') + spaceHint() + '</div>'); }
+    else titleScreen();
+    if (location.hash === '#photo') hide();   // a still of the ship with no menu in the way
+    if (document.fonts && document.fonts.load) document.fonts.load("150px 'Russo One'").then(function () { if (labelTex) { labelTex.image = makeLabel(tanker().label, '#fff6e8', 'rgba(0,0,0,0)', 150).image; labelTex.needsUpdate = true; } }).catch(function () {});
+    if (!AUTOTEST) requestAnimationFrame(frame);
+    else { // dormant smoke test, only with #autotest in the address: fixed steps on a timer, an autopilot at the helm
+      muted = true; renderer.setPixelRatio(0.35); renderer.shadowMap.enabled = false;
+      setInterval(function () { tick(0.1); }, 100);
+      setTimeout(primaryAction, 300); setTimeout(primaryAction, 600);   // title, then the hub, then the first contract
+      setInterval(function () {
+        if (G.mode !== 'play') return;
+        var q = nearest(C, S.x, S.z, S.idx), inBasin = q.s > C.runLen - 40;
+        var aim = inBasin ? C.dock : atS(C, q.s + 45, 0);
+        var want = Math.atan2(aim.z - S.z, aim.x - S.x) + (inBasin ? 0 : Math.sin(G.t * 0.6) * 0.3);
+        var err = angDiff(want, S.a);
+        var dd = Math.sqrt((C.dock.x - S.x) * (C.dock.x - S.x) + (C.dock.z - S.z) * (C.dock.z - S.z));
+        if (inBasin && dd < 20) { var e2 = angDiff(C.dock.a, S.a); keys.right = e2 > 0.05; keys.left = e2 < -0.05; } else { keys.right = err > 0.05; keys.left = err < -0.05; }
+        keys.up = !inBasin && G.boost > 40;
+        keys.down = inBasin && (dd < S.sp * S.sp / 18 + 6 || dd < 14);
+      }, 100);
+      setInterval(function () {
+        console.log('autotest', G.mode, 'done=' + G.done, 'rank=' + G.rank, 'xp=' + G.xp, 'stock=' + G.stock.toFixed(1), 'job=' + (G.job ? ROUTE[G.job.region].name + '/' + G.job.port + '/d' + G.job.diff + '/' + G.job.amount + 'c' : '-'), 'cargo=' + Math.round(G.cargo), 's=' + (S ? Math.round(S.s) : '-'), 'sp=' + (S ? S.sp.toFixed(1) : '-'), 'money=' + G.money, 'drift=' + Math.round(G.drift));
+        if (G.mode === 'docked' || G.mode === 'fail' || G.mode === 'hub') primaryAction();
+      }, 3000);
+    }
+  }
+  var hot = window.claude && window.claude.hot;
+  if (hot && hot.ready) hot.ready(start); else start(hot && hot.data ? hot.data : {});
+})();
+</script>
+<!-- ARTIFACT-END -->
+</body>
+</html>

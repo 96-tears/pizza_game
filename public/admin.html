@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Мегалюль · админка</title>
+<style>
+:root { --bg: #0f1722; --panel: #172230; --edge: #2a3b4d; --fg: #e6eef4; --muted: #8ea3b5; --accent: #ffb347; --bad: #f4705f; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--edge); position: sticky; top: 0; }
+h1 { font-size: 16px; margin: 0 auto 0 0; color: var(--accent); }
+nav button, form button, .del { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--edge); background: transparent; color: var(--fg); cursor: pointer; }
+nav button.on { background: var(--accent); color: #1a1206; border-color: transparent; }
+input { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--edge); background: #0b121b; color: var(--fg); }
+main { max-width: 960px; margin: 0 auto; padding: 16px; }
+.muted { color: var(--muted); }
+.err { color: var(--bad); }
+.card { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+.card .top { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.card .msg { white-space: pre-wrap; }
+.stars { color: var(--accent); letter-spacing: 2px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--edge); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 500; }
+td.r, th.r { text-align: right; }
+.del { color: var(--bad); padding: 3px 8px; font-size: 12px; }
+code { font-size: 12px; color: var(--muted); word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Мегалюль · админка</h1>
+  <nav id="tabs"><button data-tab="feedback" class="on">Отзывы</button><button data-tab="3d">Таблица лидеров</button></nav>
+  <form id="keyForm"><input type="password" id="key" placeholder="ADMIN_KEY" autocomplete="current-password"> <button>Войти</button></form>
+</header>
+<main id="out"><p class="muted">Введите ключ администратора (ADMIN_KEY из настроек сервера).</p></main>
+<script>
+(function () {
+  var out = document.getElementById('out'), tabs = document.getElementById('tabs'), keyInput = document.getElementById('key');
+  var tab = 'feedback';
+  var key = '';
+  try { key = sessionStorage.getItem('megalul-admin-key') || ''; } catch (e) {}
+  if (key) keyInput.value = key;
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function when(ms) { return new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+  function gameTitle(g) { return g === '3d' ? 'Мегалюль 3D' : (g || '—'); }
+  function api(method, path) {
+    return fetch(path, { method: method, headers: { authorization: 'Bearer ' + key } }).then(function (r) {
+      return r.json().catch(function () { return { ok: false, error: 'http_' + r.status }; }).then(function (d) {
+        if (!r.ok || !d.ok) throw new Error(d.error || ('http_' + r.status));
+        return d;
+      });
+    });
+  }
+  function load() {
+    if (!key) { out.innerHTML = '<p class="muted">Введите ключ администратора.</p>'; return; }
+    out.innerHTML = '<p class="muted">Загрузка…</p>';
+    var p = tab === 'feedback' ? api('GET', '/api/admin/feedback').then(renderFeedback) : api('GET', '/api/admin/scores?game=' + tab).then(renderScores);
+    p.catch(function (e) {
+      out.innerHTML = '<p class="err">' + (e.message === 'unauthorized' ? 'Ключ не подошёл, или ADMIN_KEY не задан на сервере.' : 'Ошибка: ' + esc(e.message)) + '</p>';
+    });
+  }
+  function renderFeedback(d) {
+    if (!d.items.length) { out.innerHTML = '<p class="muted">Отзывов пока нет.</p>'; return; }
+    out.innerHTML = '<p class="muted">Отзывов: ' + d.items.length + '</p>' + d.items.map(function (f) {
+      var c = f.context || {};
+      return '<div class="card"><div class="top"><span>' + when(f.created_at) + '</span><span>' + gameTitle(f.game) + '</span>' +
+        (f.rating ? '<span class="stars">' + '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating) + '</span>' : '') +
+        '<span>' + esc(f.name || 'аноним') + (f.contact ? ' · ' + esc(f.contact) : '') + '</span>' +
+        (c.level ? '<span>уровень/контракт ' + esc(c.level) + (c.score ? ', счёт ' + esc(c.score) : '') + '</span>' : '') +
+        (c.screen ? '<span>' + esc(c.screen) + (c.touch === 'true' ? ', сенсорный' : '') + '</span>' : '') + '</div>' +
+        '<div class="msg">' + esc(f.message || '(без текста)') + '</div>' +
+        (c.ua ? '<div><code>' + esc(c.ua) + '</code></div>' : '') + '</div>';
+    }).join('');
+  }
+  function renderScores(d) {
+    if (!d.items.length) { out.innerHTML = '<p class="muted">Таблица пуста.</p>'; return; }
+    out.innerHTML = '<p class="muted">Строк: ' + d.items.length + '. Удаление убирает игрока из таблицы; со следующим результатом он появится снова.</p>' +
+      '<table><thead><tr><th>#</th><th>Имя</th><th class="r">Заработано</th><th class="r">Рейсов</th><th>Рекорд</th><th>Игрок</th><th></th></tr></thead><tbody>' +
+      d.items.map(function (r, i) {
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="r">' + r.score.toLocaleString('ru-RU') + ' ₽' + '</td><td class="r">' + r.level + '</td>' +
+          '<td>' + when(r.updated_at) + '</td><td><code>' + esc(r.player_id.slice(0, 8)) + '…</code></td>' +
+          '<td><button class="del" data-id="' + r.id + '" data-name="' + esc(r.name) + '">Удалить</button></td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  out.addEventListener('click', function (e) {
+    var b = e.target.closest('.del');
+    if (!b) return;
+    if (!confirm('Удалить «' + b.getAttribute('data-name') + '» из таблицы?')) return;
+    api('DELETE', '/api/admin/scores/' + b.getAttribute('data-id')).then(load).catch(function (e) { alert('Не удалось удалить: ' + e.message); });
+  });
+  tabs.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tab]');
+    if (!b) return;
+    tab = b.getAttribute('data-tab');
+    Array.prototype.forEach.call(tabs.children, function (x) { x.className = x === b ? 'on' : ''; });
+    load();
+  });
+  document.getElementById('keyForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    key = keyInput.value.trim();
+    try { sessionStorage.setItem('megalul-admin-key', key); } catch (err) {}
+    load();
+  });
+  if (key) load();
+})();
+</script>
+</body>
+</html>

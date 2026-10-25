@@ -1,0 +1,12 @@
+{
+  "name": "Мегалюль",
+  "short_name": "Мегалюль",
+  "description": "Дрифт на танкере по реке и верфь посреди океана. По мотивам Tofu Drifter.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#141a24",
+  "theme_color": "#141a24",
+  "lang": "ru",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

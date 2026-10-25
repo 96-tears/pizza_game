@@ -1,0 +1,17 @@
+# Домен и HTTPS для статики игры (папка dist/ после npm run build). Положить в /etc/caddy/Caddyfile, заменить домен и путь, затем:
+#   sudo systemctl reload caddy
+# Сертификат Caddy получает сам, нужно только чтобы домен указывал на IP сервера.
+game.example.ru {
+    root * /var/www/megalul
+    encode gzip
+    file_server
+    header /js/* Cache-Control "public, max-age=31536000, immutable"       # адреса скриптов меняются штампом версии при сборке
+    header /vendor/* Cache-Control "public, max-age=31536000, immutable"
+    header /index.html Cache-Control "no-cache"
+}
+
+# Старый вариант: игра через Node-сервер server.js (нужен только старой игре ради таблицы лидеров и отзывов).
+# game.example.ru {
+#     encode gzip
+#     reverse_proxy 127.0.0.1:3000
+# }

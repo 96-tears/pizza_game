@@ -1,0 +1,11 @@
+# Cloudflare Pages: статика из dist/ (собирается npm run build), API из functions/ нужен только старой игре, таблицы в базе D1.
+# Порядок: npx wrangler login → npx wrangler d1 create megalul → вставить database_id ниже →
+# npm run cf:schema → npx wrangler pages secret put ADMIN_KEY → npm run cf:deploy
+name = "megalul"
+compatibility_date = "2025-10-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "megalul"
+database_id = "00000000-0000-0000-0000-000000000000"

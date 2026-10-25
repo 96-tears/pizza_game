@@ -1,0 +1,19 @@
+{
+  "name": "megalul-online",
+  "private": true,
+  "type": "module",
+  "description": "Мегалюль 3D: игра, таблица лидеров и сбор отзывов",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env server.js",
+    "build": "node tools/build.mjs",
+    "build:legacy": "node tools/build.mjs --legacy",
+    "deploy": "node tools/build.mjs && sh tools/publish.sh",
+    "test": "node tools/harness.mjs 20 && SWEEP=1 node tools/harness.mjs 1",
+    "cf:dev": "npx wrangler pages dev",
+    "cf:schema": "npx wrangler d1 execute megalul --remote --file=schema.sql",
+    "cf:deploy": "node tools/build.mjs && npx wrangler pages deploy"
+  }
+}

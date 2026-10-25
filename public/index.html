@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Мегалюль</title>
+<meta name="description" content="Дрифт на танкере по реке и верфь посреди океана. Игра по мотивам Tofu Drifter.">
+<meta name="theme-color" content="#141a24">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap">
+<style>
+/* Игра в духе Tofu Drifter, но в альбомной рамке 16:9: 3D под интерфейсом, белые скруглённые панели, синие вкладки столбиком справа. */
+:root {
+  --blue: #2f6fdc; --blue-dark: #1f4fa8; --white: #ffffff; --ink: #1d2a3a; --muted: #6c7a8c;
+  --panel: rgba(255, 255, 255, 0.92); --glass: rgba(255, 255, 255, 0.78); --gold: #ffc43d; --green: #5bc46a; --red: #f0564a;
+  --font: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+html, body { height: 100%; margin: 0; background: #141a24; overflow: hidden; font-family: var(--font); color: var(--ink); -webkit-text-size-adjust: 100%; }
+body { display: flex; align-items: center; justify-content: center; }
+button { font-family: inherit; }
+#frame { position: relative; width: min(100vw, calc(100vh * 1.77778)); height: min(100vh, calc(100vw * 0.5625)); overflow: hidden; background: #8fb3d9; }
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.hidden { display: none !important; }
+.outline { text-shadow: 0 1px 0 rgba(0,0,0,0.55), 0 0 6px rgba(0,0,0,0.35); color: #fff; }
+.caps { text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ---------- lobby ---------- */
+#lobbyUI { position: absolute; inset: 0; pointer-events: none; }
+#lobbyUI > * { pointer-events: auto; }
+.topbar { position: absolute; left: 0; top: 0; width: min(46%, 440px); box-sizing: border-box; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 0; }
+.level { display: flex; align-items: center; gap: 10px; }
+.level .star { font-size: 44px; line-height: 1; color: var(--gold); text-shadow: 0 2px 0 #b8841a, 0 3px 8px rgba(0,0,0,0.3); flex: none; }
+.level .grow { flex: 1; min-width: 0; }
+.lvl-row { display: flex; justify-content: space-between; align-items: baseline; font-weight: 900; font-size: 15px; }
+.lvl-row span { font-weight: 800; font-size: 13px; opacity: 0.95; }
+.xpbar { height: 14px; margin-top: 4px; border-radius: 8px; background: rgba(255,255,255,0.55); box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); overflow: hidden; }
+.xpbar i { display: block; height: 100%; width: 0; border-radius: 8px; background: linear-gradient(#5a94ff, #2f6fdc); transition: width 0.4s; }
+.gear { position: absolute; right: calc(12px + env(safe-area-inset-right, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); width: 44px; height: 44px; border: none; background: none; color: #fff; font-size: 30px; line-height: 1; cursor: pointer; text-shadow: 0 2px 4px rgba(0,0,0,0.35); }
+.counters { display: flex; gap: 26px; margin: 10px 0 0 4px; }
+.counter { display: flex; align-items: center; gap: 8px; }
+.counter small { display: block; font-size: 11px; font-weight: 900; letter-spacing: 0.06em; }
+.counter b { display: block; font-size: 24px; line-height: 1.05; font-weight: 900; }
+.ico { display: inline-block; width: 30px; height: 30px; border-radius: 50%; flex: none; }
+.ico.coin { background: radial-gradient(circle at 35% 35%, #ffe08a, #f2b632 60%, #c98b12); box-shadow: 0 2px 0 #a06f0c; }
+.ico.tank { border-radius: 10px; width: 26px; height: 32px; background: linear-gradient(90deg, #d9dde3, #f4f6f8 45%, #c3c9d1); box-shadow: inset 0 0 0 2px #8b96a3; position: relative; }
+.ico.tank::after { content: ''; position: absolute; left: 7px; right: 7px; top: 9px; height: 4px; background: #c0432f; border-radius: 2px; box-shadow: 0 9px 0 #c0432f; }
+.badge { position: absolute; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--glass); border-radius: 14px; padding: 8px 10px; font-size: 11px; font-weight: 900; text-align: center; max-width: 92px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.badge b { display: block; font-size: 22px; }
+.actions { position: absolute; right: calc(136px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); display: flex; background: var(--glass); border-radius: 18px; padding: 10px 6px 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.18); }
+.actions::after { content: ''; position: absolute; right: -9px; top: 50%; width: 20px; height: 20px; background: var(--glass); transform: translateY(-50%) rotate(45deg); border-radius: 4px; }
+.actions button { position: relative; z-index: 1; width: 92px; border: none; background: none; color: #3a4a5e; font-weight: 900; font-size: 12px; letter-spacing: 0.05em; cursor: pointer; padding: 2px 4px 4px; }
+.actions button + button { border-left: 1px solid rgba(0,0,0,0.12); }
+.actions button .ai { display: block; height: 42px; font-size: 34px; line-height: 42px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+.actions button.lit .ai { color: var(--gold); }
+.actions button:disabled { opacity: 0.45; cursor: default; }
+.tabs { position: absolute; right: calc(12px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: 112px; display: flex; flex-direction: column; background: var(--panel); border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.2); overflow: hidden; }
+.tabs button { position: relative; border: none; background: none; padding: 10px 4px 9px; color: var(--blue); font-weight: 900; font-size: 12px; letter-spacing: 0.05em; cursor: pointer; }
+.tabs button + button { border-top: 1px solid rgba(0,0,0,0.08); }
+.tabs button svg { display: block; width: 42px; height: 34px; margin: 0 auto 2px; fill: currentColor; }
+.tabs button.on { background: var(--blue); color: #fff; border-radius: 16px; }
+.tabs .mark { position: absolute; left: 7px; top: 6px; color: var(--gold); font-size: 14px; font-weight: 900; line-height: 1; text-shadow: 0 1px 0 rgba(0,0,0,0.45); }
+
+/* ---------- race ---------- */
+#raceUI { position: absolute; inset: 0; pointer-events: none; }
+.progress { position: absolute; left: 28%; right: 28%; top: calc(14px + env(safe-area-inset-top, 0px)); height: 12px; border-radius: 7px; background: rgba(255,255,255,0.55); overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 7px; }
+.hud-row { position: absolute; left: 16px; right: 16px; top: calc(40px + env(safe-area-inset-top, 0px)); display: flex; justify-content: space-between; align-items: flex-start; }
+.hud-block small { display: block; font-size: 12px; font-weight: 900; letter-spacing: 0.06em; }
+.hud-block b { display: block; font-size: 30px; line-height: 1.1; font-weight: 900; }
+.hud-block .speed { display: block; font-size: 12px; font-weight: 900; letter-spacing: 0.06em; opacity: 0.95; }
+.hud-block.center { text-align: left; margin-left: auto; margin-right: 14px; }
+.hud-block.center b { font-size: 22px; }
+.pause { width: 70px; height: 70px; border: none; border-radius: 18px; background: rgba(255,255,255,0.9); color: var(--blue); font-size: 24px; font-weight: 900; cursor: pointer; pointer-events: auto; margin-top: -24px; box-shadow: 0 4px 12px rgba(0,0,0,0.18); flex: none; }
+#popups { position: absolute; inset: 0; overflow: hidden; }
+.pop { position: absolute; transform: translate(-50%, -50%); font-weight: 900; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.35); white-space: nowrap; animation: popUp 1.1s ease-out forwards; font-size: 22px; }
+.pop small { display: block; font-size: 13px; letter-spacing: 0.08em; text-align: center; }
+.pop.big { font-size: 30px; }
+.pop.bad { color: #ffd0cb; }
+@keyframes popUp { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.8); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -140%) scale(1); } }
+.touch { position: absolute; inset: 0; }
+.touch .zone { position: absolute; top: 16%; bottom: 0; width: 50%; pointer-events: auto; touch-action: none; }
+.touch .zone.l { left: 0; } .touch .zone.r { right: 0; }
+.touch .zone.on::after { content: ''; position: absolute; left: 50%; bottom: 12%; width: 70px; height: 70px; margin-left: -35px; border-radius: 50%; background: rgba(255,255,255,0.22); box-shadow: 0 0 0 10px rgba(255,255,255,0.12); }
+.banner { position: absolute; left: 0; right: 0; top: 36%; text-align: center; font-size: 34px; font-weight: 900; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.45), 0 0 14px rgba(0,0,0,0.35); opacity: 0; transition: opacity 0.25s; letter-spacing: 0.04em; }
+.banner.show { opacity: 1; }
+
+/* ---------- modal panels ---------- */
+#modal { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(20, 30, 50, 0.45); z-index: 5; }
+#modal.center { align-items: center; padding: 16px; box-sizing: border-box; }
+.sheet { width: 100%; max-width: 640px; max-height: 86%; overflow-y: auto; box-sizing: border-box; background: #f3f5f8; border-radius: 22px 22px 0 0; padding: 14px 14px calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 30px rgba(0,0,0,0.25); }
+#modal.center .sheet { border-radius: 22px; max-height: 92%; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sheet h2 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink); }
+.x { width: 40px; height: 40px; border: none; border-radius: 50%; background: #e2e7ee; color: #3a4a5e; font-size: 20px; font-weight: 900; cursor: pointer; }
+.sub { color: var(--muted); font-size: 13px; font-weight: 800; margin: -6px 0 10px; }
+.card { background: #fff; border-radius: 16px; padding: 12px 14px; margin: 0 0 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); text-align: left; }
+.card.sel { box-shadow: 0 0 0 3px var(--blue); }
+.card.locked { opacity: 0.55; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.card-head b { font-size: 16px; font-weight: 900; }
+.card p { margin: 4px 0 8px; font-size: 13px; color: #40506a; font-weight: 700; line-height: 1.35; }
+.meta { font-size: 12px; color: var(--muted); font-weight: 800; letter-spacing: 0.03em; }
+.tag { display: inline-block; font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; background: #e6edf8; color: var(--blue-dark); margin-left: 6px; vertical-align: middle; }
+.tag.hot { background: #fde3df; color: #c0392b; }
+.tag.cold { background: #e0f0ff; color: #1f6fb0; }
+.row { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 8px; }
+.pay { font-size: 20px; font-weight: 900; color: #1d2a3a; white-space: nowrap; }
+.pay .c { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe08a, #f2b632 60%, #c98b12); vertical-align: -2px; margin-right: 4px; }
+.btn { border: none; border-radius: 14px; padding: 12px 18px; background: var(--blue); color: #fff; font-weight: 900; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 0 var(--blue-dark); }
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--blue-dark); }
+.btn:disabled { background: #b9c3d0; box-shadow: 0 4px 0 #8e99a8; cursor: default; }
+.btn.green { background: var(--green); box-shadow: 0 4px 0 #3a9a49; }
+.btn.ghost { background: #e2e7ee; color: #3a4a5e; box-shadow: 0 4px 0 #c3ccd8; }
+.btn.wide { display: block; width: 100%; box-sizing: border-box; text-align: center; margin-top: 10px; }
+.stat { display: grid; grid-template-columns: 90px 1fr; gap: 4px 8px; align-items: center; font-size: 11px; font-weight: 800; color: var(--muted); margin: 6px 0 4px; }
+.stat .bar { height: 8px; border-radius: 4px; background: #e2e7ee; overflow: hidden; }
+.stat .bar i { display: block; height: 100%; background: var(--blue); }
+.pips { letter-spacing: 3px; font-size: 13px; color: #c8d0da; } .pips .on { color: var(--blue); }
+.score-table { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; font-weight: 800; font-size: 14px; margin: 8px 0 12px; }
+.score-table .total { border-top: 2px solid #e2e7ee; padding-top: 8px; font-size: 18px; font-weight: 900; color: var(--blue-dark); }
+.big-num { font-size: 42px; font-weight: 900; text-align: center; color: var(--ink); line-height: 1; margin: 6px 0 2px; }
+.stars { text-align: center; font-size: 34px; letter-spacing: 6px; color: var(--gold); text-shadow: 0 2px 0 #b8841a; }
+.stars .dim { color: #d8dde4; text-shadow: none; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.center-text { text-align: center; }
+.switch { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; font-weight: 900; }
+/* телефон в альбомной ориентации: рамка невысокая, интерфейс компактнее */
+@media (max-height: 460px) { .tabs { width: 96px; } .tabs button { padding: 6px 4px 5px; font-size: 11px; } .tabs button svg { width: 34px; height: 26px; } .actions { right: calc(118px + env(safe-area-inset-right, 0px)); } .actions button { width: 80px; } .actions button .ai { height: 34px; font-size: 28px; line-height: 34px; } .level .star { font-size: 34px; } .counter b { font-size: 20px; } .hud-block b { font-size: 24px; } .sheet { max-height: 92%; } }
+/* телефон держат вертикально: просим повернуть, игра рассчитана на 16:9 */
+#rotate { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #141a24; color: #fff; z-index: 20; font-weight: 900; font-size: 18px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 20px; }
+#rotate .phone { width: 34px; height: 60px; border: 4px solid #fff; border-radius: 8px; animation: turn 1.6s ease-in-out infinite; }
+@keyframes turn { 0%, 20% { transform: rotate(0); } 60%, 100% { transform: rotate(90deg); } }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+</style>
+</head>
+<body>
+<div id="frame">
+  <canvas id="gl"></canvas>
+
+  <div id="lobbyUI" class="hidden">
+    <div class="topbar">
+      <div class="level">
+        <span class="star">★</span>
+        <div class="grow outline">
+          <div class="lvl-row"><b class="caps">Уровень <span id="lvl">1</span></b><span id="xpText">0 / 500</span></div>
+          <div class="xpbar"><i id="xpBar"></i></div>
+        </div>
+      </div>
+      <div class="counters outline">
+        <div class="counter"><i class="ico coin"></i><div><small class="caps">Монеты</small><b id="coins">0</b></div></div>
+        <div class="counter"><i class="ico tank"></i><div><small class="caps">Цистерны</small><b id="stock">0</b></div></div>
+      </div>
+    </div>
+    <button class="gear" id="btnSettings" aria-label="Настройки">⚙</button>
+    <div class="badge hidden" id="trophyBadge"></div>
+    <div class="actions" id="actions"></div>
+    <nav class="tabs" id="tabs">
+      <button data-room="office" class="on"><span class="mark"></span><svg viewBox="0 0 48 40"><path d="M24 4 4 20h6v16h11V26h6v10h11V20h6z"/></svg>КОНТОРА</button>
+      <button data-room="plant"><span class="mark"></span><svg viewBox="0 0 48 40"><path d="M6 36V14l10 7v-7l10 7v-7l10 7V8h6v28zM32 4h8v6h-8z"/></svg>ЦЕХ</button>
+      <button data-room="store"><span class="mark"></span><svg viewBox="0 0 48 40"><path d="M24 3 6 12v16l18 9 18-9V12zm0 4.6L35.6 13 24 18.8 12.4 13zM9 16.3l13.5 6.7v11L9 27.3zm16.5 17.7V23L39 16.3v11z"/></svg>СКЛАД</button>
+      <button data-room="dock"><span class="mark"></span><svg viewBox="0 0 48 40"><path d="M6 26h36l-4 8H10zM12 24V12h8V6h8v6h8v12zm10-9h4v-4h-4z"/></svg>ДОК</button>
+    </nav>
+  </div>
+
+  <div id="raceUI" class="hidden">
+    <div class="progress"><i id="raceProgress"></i></div>
+    <div class="hud-row outline">
+      <div class="hud-block"><small class="caps">Счёт дрифта</small><b id="driftScore">0</b><span class="speed" id="speed"></span></div>
+      <div class="hud-block center"><small class="caps">Состояние груза</small><b id="cargo">100%</b></div>
+      <button class="pause" id="btnPause" aria-label="Пауза">❚❚</button>
+    </div>
+    <div class="banner" id="banner"></div>
+    <div id="popups"></div>
+    <div class="touch"><div class="zone l" data-steer="-1"></div><div class="zone r" data-steer="1"></div></div>
+  </div>
+
+  <div id="modal" class="hidden"></div>
+</div>
+<div id="rotate"><div class="phone"></div>Поверните телефон</div>
+<script src="vendor/three.r128.min.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/track.js"></script>
+<script src="js/boat.js"></script>
+<script src="js/world.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/race.js"></script>
+<script src="js/studio.js"></script>
+<script src="js/lobby.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
