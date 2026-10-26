@@ -85,16 +85,20 @@
       }
     }
     // монеты: цепочки по внутренней стороне поворотов, как подсказка траектории; звёзды — редкие, на внешней кромке крутых дуг
+    var pickupRand = M.rng(spec.seed ^ 0x51a7);
     for (i = 40; i < runLen / STEP - 60; i += 1) {
       var kap = curvArr[i];
-      if (Math.abs(kap) > 0.004 && rand() < 0.045) {
+      if (Math.abs(kap) > 0.0018 && pickupRand() < 0.045) {
         var inner = kap > 0 ? 1 : -1, coff = inner * hw[i] * 0.55;
-        for (j = 0; j < 7; j++) { var cp = T.atIdx(i + j * 2, coff); T.coins.push({ x: cp.x, z: cp.z, taken: false, phase: rand() * M.TAU }); }
+        for (j = 0; j < 7; j++) { var cp = T.atIdx(i + j * 2, coff); T.coins.push({ x: cp.x, z: cp.z, taken: false, phase: pickupRand() * M.TAU }); }
         i += 24;
-      } else if (Math.abs(kap) > 0.007 && rand() < 0.02) {
-        var outer = kap > 0 ? -1 : 1, sp = T.atIdx(i, outer * hw[i] * 0.7); T.stars.push({ x: sp.x, z: sp.z, taken: false, phase: rand() * M.TAU }); i += 10;
+      } else if (Math.abs(kap) > 0.0025 && pickupRand() < 0.02) {
+        var outer = kap > 0 ? -1 : 1, sp = T.atIdx(i, outer * hw[i] * 0.7); T.stars.push({ x: sp.x, z: sp.z, taken: false, phase: pickupRand() * M.TAU }); i += 10;
       }
     }
+    // Even a mostly straight beginner route has something to collect.
+    if (!T.coins.length) for (j = 0; j < 7; j++) { var coin = T.atS(runLen * 0.3 + j * 8, 0); T.coins.push({ x: coin.x, z: coin.z, taken: false, phase: pickupRand() * M.TAU }); }
+    if (!T.stars.length) { var star = T.atS(runLen * 0.65, 0); T.stars.push({ x: star.x, z: star.z, taken: false, phase: pickupRand() * M.TAU }); }
     // трафик: попутные баржи справа и встречные катера слева, в разных ячейках по 420 м, чтобы обе полосы не перекрывались разом
     if (!spec.zen || true) {
       var cells = Math.floor((runLen - 500) / 420);

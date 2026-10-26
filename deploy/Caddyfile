@@ -5,9 +5,12 @@ game.example.ru {
     root * /var/www/megalul
     encode gzip
     file_server
-    header /js/* Cache-Control "public, max-age=31536000, immutable"       # адреса скриптов меняются штампом версии при сборке
+    header /js/* Cache-Control "public, max-age=31536000, immutable"       # имена скриптов содержат хэш содержимого
     header /vendor/* Cache-Control "public, max-age=31536000, immutable"
     header /index.html Cache-Control "no-cache"
+    header / Cache-Control "no-cache"
+    header /version.txt Cache-Control "no-cache"
+    redir /megalul-3d.html / 301
 }
 
 # Старый вариант: игра через Node-сервер server.js (нужен только старой игре ради таблицы лидеров и отзывов).

@@ -49,9 +49,11 @@
 
   // ---------- вход, выход, обновление экрана ----------
   L.init = function () {
-    C = M.store.load(); if (!C || C.v !== 1) C = fresh();
+    C = M.store.load(M.validateCareer); if (!C) C = fresh();
     if (M.DEMO) { C = fresh(); for (var k in C.rooms) C.rooms[k] = M.clamp(M.DEMO.rooms, 1, 5); C.trophy = !!M.DEMO.trophy; C.level = 30; C.coins = 300000; if (M.DEMO.room && ACTIONS[M.DEMO.room]) room = M.DEMO.room; }   // витрина для скриншотов
-    accrue(); refreshOrders(); save();
+    accrue();
+    if (C.pendingRace) { C.stock = Math.min(storeCap(), C.stock + C.pendingRace.amount); C.pendingRace = null; M.store.message = 'Незавершённый рейс отменён. Груз возвращён на склад в пределах его вместимости.'; }
+    refreshOrders(); save();
     M.studio.init(); M.studio.setLevels(C.rooms); M.studio.setShip(shipSpec()); M.studio.setTrophy(C.trophy); M.studio.focus(room, true);
     M.bind(el.tabs, function () {});
     Array.prototype.forEach.call(el.tabs.querySelectorAll('[data-room]'), function (b) { b.addEventListener('click', function () { setRoom(b.getAttribute('data-room')); }); });
@@ -89,10 +91,10 @@
   function head(title, sub) { return '<div class="sheet-head"><h2>' + title + '</h2><button class="x" data-close>✕</button></div>' + (sub ? '<div class="sub">' + sub + '</div>' : ''); }
   function ordersPanel() {
     accrue(); refreshOrders();
-    var e = effective(), h = head('Заказы', 'на борт влезает ' + M.tanks(e.tanks) + ' · на складе ' + stockWhole()), i;
+    var e = effective(), h = head('Заказы', 'на борт влезает ' + M.tanks(e.tanks) + ' · на складе ' + stockWhole() + '<br>Рулите A/D, стрелками или половинами экрана. Для разгрузки пройдите через синее кольцо у причала. За монету на реке — 20 монет на счёт.'), i;
     for (i = 0; i < C.orders.length; i++) {
       var o = C.orders[i], tr = D.trackById(o.track), why = canTake(o), len = D.LENGTHS.filter(function (x) { return x.key === o.len; })[0];
-      h += '<div class="card' + (why ? ' locked' : '') + '"><div class="card-head"><b>' + tr.name + ' · ' + o.portNames.join(' → ') + '</b>' + M.pips(Math.min(5, Math.ceil(o.difficulty * 5)), 5) + '</div>' +
+      h += '<div class="card' + (why ? ' locked' : '') + '"><div class="card-head"><b>' + tr.name + ' · ' + o.portNames.map(M.esc).join(' → ') + '</b>' + M.pips(Math.min(5, Math.ceil(o.difficulty * 5)), 5) + '</div>' +
         '<p>' + len.name + ' рейс, ' + (o.lengthM / 1000).toFixed(1).replace('.', ',') + ' км · ' + M.tanks(o.amount) + ' на ' + o.ports + ' порта' + (o.until ? ' · ещё ' + M.fmtTime((o.until - M.now()) / 1000) : '') + (tr.friction < 0.8 ? '<span class="tag cold">лёд</span>' : '') + (tr.rocks ? '<span class="tag hot">камни</span>' : '') + (tr.night ? '<span class="tag">ночь</span>' : '') + (o.hard ? '<span class="tag hot">сложно</span>' : '') + (D.pace(o.difficulty) >= 1.25 ? '<span class="tag hot">быстро</span>' : '') + '</p>' +
         '<div class="row">' + M.coin(o.pay) + '<button class="btn" data-act="take" data-key="' + i + '"' + (why ? ' disabled' : '') + '>' + (why || 'В рейс') + '</button></div></div>';
     }
@@ -102,13 +104,13 @@
   }
   function takeOrder(i) {
     accrue(); var o = C.orders[i]; if (!o || canTake(o)) { paint(); return; }
-    C.stock -= o.amount; save(); M.modal.close();
+    C.stock -= o.amount; C.pendingRace = { amount: o.amount }; save(); M.modal.close();
     startRace(o, i);
   }
   function startRace(o, idx) {
     L.hide();
-    M.race.start({ order: o, ship: effective(), onQuit: function () { if (idx != null) { C.stock = Math.min(storeCap(), C.stock + o.amount); save(); } L.show(); },
-      onEnd: function (res) { if (idx != null) C.orders.splice(C.orders.indexOf(o), 1); finishRace(o, res); } });
+    M.race.start({ order: o, ship: effective(), onQuit: function () { if (idx != null) { accrue(); C.stock = Math.min(storeCap(), C.stock + o.amount); C.pendingRace = null; save(); } L.show(); },
+      onEnd: function (res) { if (idx != null) { var at = C.orders.indexOf(o); if (at >= 0) C.orders.splice(at, 1); C.pendingRace = null; } finishRace(o, res); } });
   }
   function finishRace(o, res) {
     C.coins += res.pay; var ups = addXp(res.xp); C.runs += 1; C.best = Math.max(C.best, res.score);
@@ -120,7 +122,7 @@
       '<div class="big-num">' + M.fmt(res.score) + '</div><div class="meta center-text">счёт дрифта · лучшая серия ' + M.fmt(res.best) + '</div>' +
       '<div class="score-table">' + (res.zen ? '' : '<span>Сдано</span><span>' + res.delivered + ' из ' + M.tanks(res.amount) + '</span><span>Состояние груза</span><span>' + res.cargo + '%</span>') +
       '<span>Монеты по пути</span><span>' + res.coins + '</span>' + (res.stars ? '<span>Звёзды</span><span>' + res.stars + '</span>' : '') +
-      (res.zen ? '' : '<span class="total">Оплата</span><span class="total">' + M.fmt(res.pay) + '</span>') + '<span>Опыт</span><span>+' + M.fmt(res.xp) + '</span></div>' +
+      '<span class="total">Получено монет</span><span class="total">' + M.fmt(res.pay) + '</span><span>Опыт</span><span>+' + M.fmt(res.xp) + '</span></div>' +
       (ups ? '<div class="card center-text"><b>Новый уровень: ' + C.level + '</b><p>На верфи открылись новые улучшения.</p></div>' : '') +
       '<button class="btn wide" data-close>На верфь</button>';
     M.modal.open(h, { center: true, sticky: true });
@@ -167,15 +169,16 @@
     M.modal.open(h, { actions: function (act, key) { if (act !== 'tune') return; var u = D.TUNING.filter(function (x) { return x.key === key; })[0], l = t[key] || 0, price = Math.round(u.prices[l] * (1 + 0.4 * (s.cls - 1))); if (l >= 3 || l >= depth || C.coins < price) return; C.coins -= price; t[key] = l + 1; save(); tunePanel(); paint(); } });
   }
   function zenPanel() {
-    var open = tracksOpen(), h = head('Дзен', 'бесконечная река без груза: только дрифт, счёт идёт в опыт');
+    var open = tracksOpen(), h = head('Дзен', '10 км без груза: дрифт даёт опыт, собранные монеты — валюту');
     for (var i = 0; i < open.length; i++) h += '<div class="card"><div class="card-head"><b>' + open[i].name + '</b>' + (open[i].friction < 0.8 ? '<span class="tag cold">лёд</span>' : open[i].rocks ? '<span class="tag hot">камни</span>' : open[i].night ? '<span class="tag">ночь</span>' : '') + '</div><div class="row"><span class="meta">10 км реки, финиш в конце</span><button class="btn" data-act="zen" data-key="' + open[i].id + '">Поехали</button></div></div>';
     M.modal.open(h, { actions: function (act, key) { if (act === 'zen') { M.modal.close(); startRace({ zen: true, seed: (M.now() % 1000003), track: key, lengthM: 10000, difficulty: M.clamp(0.2 + 0.02 * C.level, 0.2, 0.9), amount: 0, ports: 0, pay: 0 }, null); } } });
   }
   function settingsPanel() {
     var h = head('Настройки', 'Мегалюль · карьера капитана Данилкина') + '<div class="switch"><span>Рейсов: ' + C.runs + ' · лучший счёт ' + M.fmt(C.best) + '</span></div>' +
       '<div class="card"><div class="card-head"><b>Платформа</b>' + M.pips(D.rigStage(C.rooms), 5) + '</div><p>' + D.RIG_LOOK[D.rigStage(C.rooms) - 1] + '</p></div>' +
-      '<div class="switch"><span>Начать карьеру заново</span><button class="btn ghost" data-act="reset">Сбросить</button></div><div class="meta center-text">Сохранение живёт в этом браузере.</div>';
-    M.modal.open(h, { actions: function (act) { if (act === 'reset') { if (!confirm('Стереть карьеру и начать заново?')) return; M.store.clear(); C = fresh(); refreshOrders(); save(); M.modal.close(); M.studio.setLevels(C.rooms); M.studio.setShip(shipSpec()); M.studio.setTrophy(false); paint(); } } });
+      '<div class="switch"><span>Игра на главном экране</span><button class="btn ghost" data-act="install">Добавить</button></div>' +
+      '<div class="switch"><span>Начать карьеру заново</span><button class="btn ghost" data-act="reset">Сбросить</button></div><div class="meta center-text">Сохранение живёт в этом браузере. При перезагрузке незавершённый рейс отменяется, груз возвращается в пределах вместимости склада.</div><div class="meta center-text">Версия ' + M.esc((window.MEGALUL_CONFIG || {}).version || 'dev') + '</div>';
+    M.modal.open(h, { actions: function (act) { if (act === 'install') { window.MEGALUL_INSTALL.show(); return; } if (act === 'reset') { if (!confirm('Стереть карьеру и начать заново?')) return; M.store.clear(); C = fresh(); refreshOrders(); save(); M.modal.close(); M.studio.setLevels(C.rooms); M.studio.setShip(shipSpec()); M.studio.setTrophy(false); paint(); } } });
   }
   function invest() { // автотест: тратит монеты как торопливый игрок: комнаты по порядку, корабль повместительнее, потом трофей
     var keys = ['plant', 'store', 'dock', 'office'], changed = false, i, k, dockCls = D.ROOMS.dock.cls[roomLvl('dock') - 1], want = null;

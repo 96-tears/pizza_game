@@ -113,7 +113,7 @@
       for (var q = 0; q < T.coins.length; q++) { var c = T.coins[q]; if (!c.mesh) continue; if (c.taken) { if (c.mesh.visible) { c.mesh.position.y += 10 * dt; c.mesh.scale.multiplyScalar(1 - 6 * dt); if (c.mesh.scale.x < 0.1) c.mesh.visible = false; } continue; } c.mesh.rotation.z += dt * 2.5; c.mesh.position.y = 1.6 + Math.sin(t * 3 + c.phase) * 0.2; }
       for (q = 0; q < T.stars.length; q++) { var s = T.stars[q]; if (!s.mesh) continue; if (s.taken) { s.mesh.visible = false; continue; } s.mesh.rotation.y += dt * 1.8; s.mesh.position.y = 2 + Math.sin(t * 2 + s.phase) * 0.3; }
     };
-    W.dispose = function () { scene.remove(W.group); W.group.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); };
+    W.dispose = function () { scene.remove(W.group); M.disposeTree(W.group); };
     return W;
   };
 })();

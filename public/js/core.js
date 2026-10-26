@@ -31,9 +31,29 @@ var M = window.M || (window.M = {});
   // ---------- хранилище ----------
   M.store = {
     key: 'megalul-career',
-    load: function () { try { return JSON.parse(localStorage.getItem(this.key)); } catch (e) { return null; } },
-    save: function (o) { try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} },
-    clear: function () { try { localStorage.removeItem(this.key); } catch (e) {} }
+    message: '', failed: false, validate: null,
+    notice: function () { var el = M.el('saveWarning'); if (el) { el.textContent = this.failed ? 'Прогресс не сохраняется. Разрешите хранение данных в браузере и освободите место.' : this.message; el.classList.toggle('hidden', !el.textContent); } },
+    load: function (validate) {
+      this.validate = validate;
+      try {
+        var raw = localStorage.getItem(this.key), backup = localStorage.getItem(this.key + '-backup'), value = this.parse(raw);
+        if (value) return value;
+        value = this.parse(backup);
+        if (value) this.message = 'Восстановлена резервная копия прогресса.';
+        else if (raw || backup) this.message = 'Сохранение повреждено. Начата новая карьера.';
+        return value;
+      } catch (e) { this.failed = true; return null; }
+    },
+    parse: function (raw) { try { var value = JSON.parse(raw); return this.validate ? this.validate(value) : value; } catch (e) { return null; } },
+    save: function (o) {
+      try {
+        var previous = localStorage.getItem(this.key);
+        if (previous && this.parse(previous)) localStorage.setItem(this.key + '-backup', previous);
+        localStorage.setItem(this.key, JSON.stringify(o)); this.failed = false;
+      } catch (e) { this.failed = true; }
+      this.notice(); return !this.failed;
+    },
+    clear: function () { try { localStorage.removeItem(this.key); localStorage.removeItem(this.key + '-backup'); this.message = ''; } catch (e) { this.failed = true; } }
   };
 
   // ---------- кнопки с data-act: один обработчик на контейнер ----------

@@ -11,7 +11,7 @@
     "build": "node tools/build.mjs",
     "build:legacy": "node tools/build.mjs --legacy",
     "deploy": "node tools/build.mjs && sh tools/publish.sh",
-    "test": "node tools/harness.mjs 20 && SWEEP=1 node tools/harness.mjs 1",
+    "test": "node --test tools/regression.test.mjs tools/build.test.mjs && node tools/harness.mjs 90 && SWEEP=1 node tools/harness.mjs 1",
     "cf:dev": "npx wrangler pages dev",
     "cf:schema": "npx wrangler d1 execute megalul --remote --file=schema.sql",
     "cf:deploy": "node tools/build.mjs && npx wrangler pages deploy"

@@ -9,6 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap">
 <style>
@@ -23,6 +24,10 @@ body { display: flex; align-items: center; justify-content: center; }
 button { font-family: inherit; }
 #frame { position: relative; width: min(100vw, calc(100vh * 1.77778)); height: min(100vh, calc(100vw * 0.5625)); overflow: hidden; background: #8fb3d9; }
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#frame, #frame *, #rotate, #rotate * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#frame input, #frame textarea, #frame [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+/* Feedback belongs to the lobby, including while a race is paused. */
+#lobbyUI.hidden ~ #feedbackLink { display: none !important; }
 .hidden { display: none !important; }
 .outline { text-shadow: 0 1px 0 rgba(0,0,0,0.55), 0 0 6px rgba(0,0,0,0.35); color: #fff; }
 .caps { text-transform: uppercase; letter-spacing: 0.04em; }
@@ -134,6 +139,14 @@ button { font-family: inherit; }
 #rotate .phone { width: 34px; height: 60px; border: 4px solid #fff; border-radius: 8px; animation: turn 1.6s ease-in-out infinite; }
 @keyframes turn { 0%, 20% { transform: rotate(0); } 60%, 100% { transform: rotate(90deg); } }
 @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+#rotate .window-hint { display: none; }
+@media (max-width: 600px) and (pointer: fine) { #rotate { display: flex; } #rotate .phone, #rotate .phone-hint { display: none; } #rotate .window-hint { display: block; } }
+#installDialog { border:0; border-radius:20px; padding:24px; width:min(420px, calc(100vw - 64px)); max-height:calc(100dvh - 64px); overflow:auto; color:var(--ink); box-shadow:0 12px 60px #0005; }
+#installDialog::backdrop { background:#101c32aa; }
+#installDialog h2 { margin:0 0 12px; font-size:24px; }
+#installDialog p { line-height:1.5; }
+#installDialog button { display:block; width:100%; padding:12px; margin-top:12px; border:0; border-radius:10px; font-size:16px; cursor:pointer; touch-action:manipulation; }
+#installAction { background:var(--blue); color:white; }
 </style>
 </head>
 <body>
@@ -178,11 +191,23 @@ button { font-family: inherit; }
   </div>
 
   <div id="modal" class="hidden"></div>
+  <div id="saveWarning" class="hidden" role="status" style="position:absolute;bottom:90px;left:12px;max-width:70%;background:#fff3d3;color:#352b1d;padding:8px 12px;border-radius:8px;z-index:4;font-size:13px;pointer-events:none"></div>
+  <a id="feedbackLink" class="hidden" target="_blank" rel="noopener noreferrer" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:4;background:#fff;color:#234979;padding:8px 12px;border-radius:8px;font-weight:bold;text-decoration:none;font-size:13px">Оставить отзыв ↗</a>
 </div>
-<div id="rotate"><div class="phone"></div>Поверните телефон</div>
+<div id="rotate"><div class="phone"></div><span class="phone-hint">Поверните телефон</span><span class="window-hint">Расширьте окно игры<br><small>Нужна ширина больше 600 пикселей</small></span></div>
+<dialog id="installDialog" aria-labelledby="installTitle" aria-describedby="installMessage">
+<h2 id="installTitle">Игра на главном экране</h2>
+<p id="installMessage"></p>
+<button id="installAction">Как добавить</button>
+<button id="installDismiss">Продолжить в браузере</button>
+</dialog>
+<script src="js/install.js"></script>
 <script src="vendor/three.r128.min.js"></script>
 <script src="js/core.js"></script>
+<script src="js/config.js"></script>
+<script src="js/feedback.js"></script>
 <script src="js/data.js"></script>
+<script src="js/career.js"></script>
 <script src="js/track.js"></script>
 <script src="js/boat.js"></script>
 <script src="js/world.js"></script>

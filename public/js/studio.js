@@ -32,7 +32,7 @@
   function sign(g, text, color, x, y, z, w, h, faceX, flip) { // табличка с надписью; flip разворачивает текст в зеркально отражённых комнатах
     var m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: M.label(text, color, 64), transparent: true })); m.position.set(x, y, z); if (faceX) m.rotation.y = Math.PI / 2; if (flip) m.scale.x = -1; g.add(m); return m;
   }
-  function clear(g) { while (g.children.length) { var c = g.children[0]; g.remove(c); c.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); }); } }
+  function clear(g) { M.disposeTree(g); while (g.children.length) g.remove(g.children[0]); }
 
   // ---------- мелкий реквизит; координаты комнаты канонические: задние стены слева (x = -8.7) и справа (z = -8.7), пол на y = 0 ----------
   function cracks(g, seed) { var r = M.rng(seed); for (var i = 0; i < 4; i++) { var c = box(2 + r() * 3, 0.02, 0.1, mat(0x7d8287), -6 + r() * 12, 0.02, -6 + r() * 12, g, false); c.rotation.y = r() * 3; } }
@@ -302,10 +302,10 @@
     buildDeco(decoRoot);
     if (shipSpec) ST.setShip(shipSpec);
   };
-  ST.setShip = function (spec) { shipSpec = spec; if (!shipHolder) return; if (shipMesh) shipHolder.remove(shipMesh); shipMesh = M.buildShip(spec); shipMesh.position.y = 0.4; shipHolder.add(shipMesh); };
+  ST.setShip = function (spec) { if (shipMesh && shipSpec === spec) return; shipSpec = spec; if (!shipHolder) return; if (shipMesh) { shipHolder.remove(shipMesh); M.disposeTree(shipMesh); } shipMesh = M.buildShip(spec); shipMesh.position.y = 0.4; shipHolder.add(shipMesh); };
   ST.setStock = function (stock, cap) { var n = tankSlots.length, show = Math.round(M.clamp(stock / cap, 0, 1) * n); for (var i = 0; i < n; i++) { tankSlots[i][0].visible = i < show; tankSlots[i][1].visible = i < show; } };
   // трофей-коробка стоит на площадке открытой крышкой к камере конторы
-  ST.setTrophy = function (has) { if (has && !trophyMesh) { trophyMesh = M.buildTrophy(); trophyMesh.position.set(PAD.x, 0.42, PAD.z); trophyMesh.rotation.y = 1.3; yard.add(trophyMesh); } if (!has && trophyMesh) { yard.remove(trophyMesh); trophyMesh = null; } };
+  ST.setTrophy = function (has) { if (has && !trophyMesh) { trophyMesh = M.buildTrophy(); trophyMesh.position.set(PAD.x, 0.42, PAD.z); trophyMesh.rotation.y = 1.3; yard.add(trophyMesh); } if (!has && trophyMesh) { yard.remove(trophyMesh); M.disposeTree(trophyMesh); trophyMesh = null; } };
   ST.focus = function (key, snap) { azTarget = ST.azimuth(key) + 0.5; if (snap) az = azTarget; };   // камера смотрит чуть сбоку: выбранная комната слева, справа место под вкладки
   ST.update = function (dt) {
     t += dt; az += M.angDiff(azTarget, az) * Math.min(1, 4 * dt);

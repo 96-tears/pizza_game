@@ -6,12 +6,13 @@
   var keys = { left: false, right: false }, zones = {};
   var camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camDir = 0, camInit = false;
   var spray, sprayN = 420, sprayAlive = [], sprayIdx = 0, tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpP = new THREE.Vector3(), tmpS = new THREE.Vector3();
-  var el = {}, live = null, headlight = null;
+  var el = {}, live = null, headlight = null, finishTimer = null;
   ['raceUI', 'raceProgress', 'driftScore', 'cargo', 'speed', 'banner', 'popups', 'btnPause'].forEach(function (id) { el[id] = M.el(id); });
 
   // ---------- старт и остановка ----------
   // o: { order: {track, lengthM, difficulty, amount, ports, pay, seed, zen}, ship: {cruise, turn, grip, armour, model (D.SHIPS entry), tanks}, onEnd(result), onQuit() }
   R.start = function (o) {
+    if (running) R.stop();
     opts = o; def = M.D.trackById(o.order.track);
     var pace = M.D.pace(o.order.difficulty); spec = {}; for (var key in o.ship) spec[key] = o.ship[key]; spec.cruise = o.ship.cruise * pace; spec.pace = pace;   // темп: сложный заказ идёт быстрее
     T = M.makeTrack({ seed: o.order.seed, length: o.order.lengthM, difficulty: o.order.difficulty, ports: o.order.ports, rocks: !!def.rocks, lamps: def.lamps, zen: !!o.order.zen, treeDensity: def.id === 'rocks' ? 1.3 : 1, pace: pace });
@@ -24,6 +25,8 @@
     S = M.newShipState(T);
     var perPort = T.ports.length ? Math.floor(o.order.amount / T.ports.length) : 0;
     G = { t: 0, score: 0, session: 0, sessionT: 0, mult: 1, grace: 0, cargo: 100, coins: 0, stars: 0, delivered: 0, onBoard: o.order.amount, perPort: perPort, hitCool: 0, shake: 0, finished: false, sessionBest: 0 };
+    G.safeS = S.s; G.progressAt = 0;
+    resetInput(); camPos.set(0, 0, 0);
     makeSpray(); camInit = false; running = true; paused = false;
     el.raceUI.classList.remove('hidden'); el.popups.innerHTML = ''; live = null;
     el.driftScore.textContent = '0'; el.cargo.textContent = '100%'; el.speed.textContent = ''; el.raceProgress.style.width = '0%';
@@ -31,10 +34,11 @@
     bindInput();
     R.resize();
   };
-  R.stop = function () { running = false; unbindInput(); el.raceUI.classList.add('hidden'); if (world) world.dispose(); world = null; scene = null; };
+  R.stop = function () { running = false; clearTimeout(finishTimer); clearTimeout(banner.t); unbindInput(); el.raceUI.classList.add('hidden'); if (scene) M.disposeTree(scene); world = null; scene = null; ship = null; spray = null; headlight = null; T = null; S = null; camera = null; sprayAlive = []; live = null; el.popups.innerHTML = ''; };
   R.resize = function () { if (!camera) return; var c = M.el('gl'); camera.aspect = (c.clientWidth || 9) / (c.clientHeight || 16); camera.updateProjectionMatrix(); };
   R.isRunning = function () { return running; };
   R.scene = function () { return scene; }; R.camera = function () { return camera; };
+  R.status = function () { return running ? { time: G.t, progress: S.s, length: T.finish.s, paused: paused } : null; };
   // автопилот для автотеста: целится в ось на две секунды хода впереди, на поворотах держит руль дольше нужного, чтобы корма срывалась
   R.autopilot = function () {
     if (!running || paused || G.finished) return false;
@@ -45,15 +49,26 @@
 
   // ---------- ввод: клавиши и половины экрана ----------
   function onKey(e) {
-    if (M.modal.isOpen()) return;
     var down = e.type === 'keydown';
+    if (!down) {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+      return;
+    }
+    if ((e.code === 'KeyP' || e.code === 'Escape') && (!M.modal.isOpen() || paused)) { e.preventDefault(); if (!e.repeat) togglePause(); return; }
+    if (M.modal.isOpen() || paused) return;
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys.left = down; e.preventDefault(); }
     else if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys.right = down; e.preventDefault(); }
     else if (down && (e.code === 'KeyP' || e.code === 'Escape')) togglePause();
   }
-  function zoneHandler(z, on) { return function (e) { e.preventDefault(); var k = z.getAttribute('data-steer') === '-1' ? 'left' : 'right'; keys[k] = on; z.classList.toggle('on', on); }; }
+  function resetInput() { keys.left = keys.right = false; Object.keys(zones).forEach(function (k) { zones[k].classList.remove('on'); }); }
+  function loseFocus() { resetInput(); if (running && !paused && !G.finished) togglePause(); }
+  R.pause = loseFocus;
+  function visibility() { if (document.hidden) loseFocus(); }
+  function zoneHandler(z, on) { return function (e) { e.preventDefault(); if (on && (paused || M.modal.isOpen())) return; var k = z.getAttribute('data-steer') === '-1' ? 'left' : 'right'; keys[k] = on; z.classList.toggle('on', on); }; }
   function bindInput() {
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
+    window.addEventListener('blur', loseFocus); document.addEventListener('visibilitychange', visibility);
     Array.prototype.forEach.call(el.raceUI.querySelectorAll('.zone'), function (z) {
       zones[z.className] = z; var on = zoneHandler(z, true), off = zoneHandler(z, false);
       z.addEventListener('pointerdown', on); z.addEventListener('pointerup', off); z.addEventListener('pointercancel', off); z.addEventListener('pointerleave', off);
@@ -63,10 +78,12 @@
   }
   function unbindInput() {
     window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); keys.left = keys.right = false;
+    window.removeEventListener('blur', loseFocus); document.removeEventListener('visibilitychange', visibility);
     Array.prototype.forEach.call(el.raceUI.querySelectorAll('.zone'), function (z) { if (z._h) { z.removeEventListener('pointerdown', z._h[0]); z.removeEventListener('pointerup', z._h[1]); z.removeEventListener('pointercancel', z._h[1]); z.removeEventListener('pointerleave', z._h[1]); } z.classList.remove('on'); });
   }
   function togglePause() {
     if (!running || G.finished) return;
+    resetInput();
     if (!paused) {
       paused = true;
       M.modal.open('<div class="sheet-head"><h2>Пауза</h2></div><button class="btn wide" data-act="resume">Продолжить</button><button class="btn ghost wide" data-act="quit">Выйти на верфь</button>', { center: true, sticky: true,
@@ -146,6 +163,10 @@
     var steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
     if (!G.finished) M.stepShip(S, { steer: steer }, dt, P);
     var q = T.nearest(S.x, S.z, S.idx); S.idx = q.i; S.s = q.s; S.off = q.off;
+    if (!G.finished) {
+      if (q.s >= 0 && q.s <= T.finish.s + 20 && q.dist < q.hw && q.s > G.safeS + 2) { G.safeS = q.s; G.progressAt = G.t; }
+      if (!Number.isFinite(q.s) || q.s < 0 || q.dist > q.hw + 40 || G.t - G.progressAt > 15) restore();
+    }
     stepTraffic(dt);
     if (!G.finished) collide(dt);
     // дрифт: очки идут, пока есть угол и ход; короткий разрыв прощается, множитель растёт с длительностью серии
@@ -171,7 +192,13 @@
     updateCamera(dt);
     world.setSun(S.x, S.z);
   };
-  function restore() { var p = T.atS(S.s + 10, 0); S.x = p.x; S.z = p.z; S.a = p.a; S.vx = Math.cos(p.a) * 5; S.vz = Math.sin(p.a) * 5; S.w = 0; S.stuckT = 0; banner('ВЕРНУЛИ НА ВОДУ', 1.2); }
+  function restore() {
+    var s = M.clamp(G.safeS, 24, T.finish.s - 5), p = T.atS(s, 0);
+    S.x = p.x; S.z = p.z; S.a = p.a; S.vx = Math.cos(p.a) * 5; S.vz = Math.sin(p.a) * 5;
+    S.sp = 5; S.w = 0; S.slip = 0; S.drifting = false; S.stuckT = 0; S.s = s; S.off = 0; S.idx = Math.floor(s / T.step);
+    G.session = 0; G.sessionT = 0; G.mult = 1; G.grace = 0; G.progressAt = G.t;
+    resetInput(); banner('ВЕРНУЛИ НА ВОДУ', 1.2);
+  }
   function stepTraffic(dt) {
     for (var i = 0; i < T.traffic.length; i++) {
       var tr = T.traffic[i]; tr.s += tr.dir * tr.speed * dt;
@@ -195,10 +222,10 @@
   function finish() {
     G.finished = true; endSession(true); banner('ФИНИШ', 2);
     var o = opts.order, share = o.amount ? G.delivered / o.amount : 1, cargoK = 0.4 + 0.6 * G.cargo / 100;
-    var pay = o.zen ? 0 : Math.round(o.pay * share * cargoK) + G.coins * 20;
+    var pay = (o.zen ? 0 : Math.round(o.pay * share * cargoK)) + G.coins * 20;
     var xp = Math.round(G.score) + G.stars * 400 + (o.zen ? 0 : Math.round(o.pay * 0.6 * share * cargoK));
     var result = { score: Math.round(G.score), best: G.sessionBest, coins: G.coins, stars: G.stars, cargo: Math.round(G.cargo), delivered: G.delivered, amount: o.amount, time: G.t, pay: pay, xp: xp, zen: !!o.zen };
-    setTimeout(function () { if (running) { R.stop(); if (opts.onEnd) opts.onEnd(result); } }, 1500);
+    finishTimer = setTimeout(function () { if (running) { R.stop(); if (opts.onEnd) opts.onEnd(result); } }, 1500);
   }
 
   // ---------- камера: высоко сзади, доворачивается за скоростью, трясётся при ударе ----------

@@ -7,6 +7,18 @@
   function cyl(rt, rb, h, seg, m, x, y, z, g, rotZ) { var mesh = new THREE.Mesh(flat(new THREE.CylinderGeometry(rt, rb, h, seg || 10)), m); mesh.position.set(x, y, z); if (rotZ) mesh.rotation.z = rotZ; mesh.castShadow = true; g.add(mesh); return mesh; }
   M.flat = flat; M.mat = mat; M.box = box; M.cyl = cyl;
 
+  // Each scene/subtree owns its materials; meshes within it may share resources.
+  M.disposeTree = function (root) {
+    var seen = new Set();
+    function dispose(resource) { if (resource && !seen.has(resource)) { seen.add(resource); resource.dispose(); } }
+    root.traverse(function (o) {
+      dispose(o.geometry);
+      var materials = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      materials.forEach(function (m) { Object.keys(m).forEach(function (key) { if (m[key] && m[key].isTexture) dispose(m[key]); }); dispose(m); });
+      if (o.shadow) { dispose(o.shadow.map); dispose(o.shadow.mapPass); }
+    });
+  };
+
   // Корпус: план в виде многоугольника (нос острый, корма плоская), выдавленный вверх.
   function hullGeo(len, half, h) {
     var s = new THREE.Shape();
