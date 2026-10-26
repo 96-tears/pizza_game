@@ -37,6 +37,7 @@ function makeEl(tag, id) {
 }
 const els = {}; const ids = ['gl', 'modal', 'lobbyUI', 'lvl', 'xpText', 'xpBar', 'coins', 'stock', 'actions', 'tabs', 'tabmarks', 'trophyBadge', 'btnSettings', 'raceUI', 'raceProgress', 'driftScore', 'cargo', 'banner', 'popups', 'btnPause'];
 ids.forEach(id => { els[id] = makeEl('div', id); }); els.tabmarks.children = [makeEl('span'), makeEl('span'), makeEl('span'), makeEl('span')];
+els.modal.classList.add('hidden');   // как в index.html: панель закрыта, пока её не открыли
 const storage = options.storage || {};  const localStorage = { getItem: k => (k in storage ? storage[k] : null), setItem: (k, v) => { storage[k] = String(v); }, removeItem: k => { delete storage[k]; } };
 const logs = [];
 const sandbox = {
@@ -53,7 +54,7 @@ vm.createContext(sandbox);
 function run(file) { vm.runInContext(fs.readFileSync(root + '/' + file, 'utf8'), sandbox, { filename: file }); }
 run('vendor/three.r128.min.js');
 sandbox.THREE.WebGLRenderer = function () { this.shadowMap = {}; this.setPixelRatio = () => {}; this.setSize = () => {}; this.render = () => {}; };
-['core', 'data', 'career', 'track', 'boat', 'world', 'physics', 'race', 'studio', 'lobby'].forEach(f => run('js/' + f + '.js'));
+['core', 'data', 'career', 'track', 'boat', 'world', 'physics', 'rockets', 'race', 'studio', 'lobby'].forEach(f => run('js/' + f + '.js'));
 
 
 return { M: sandbox.M, sandbox, els, storage, advance, run, logs, now: () => vnow };

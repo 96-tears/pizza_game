@@ -25,5 +25,5 @@ const c = M.lobby.career();
 console.log(`virtual ${minutes} min in ${Date.now() - t0} ms; runs=${c.runs} level=${c.level} xp=${c.xp} coins=${c.coins} stock=${c.stock.toFixed(1)} restores=${restores} rooms=${JSON.stringify(c.rooms)}`);
 console.log(`fleet=${c.fleet.join(',')} ship=${c.ship} trophy=${c.trophy} trophyAt=${trophyAt === null ? '-' : trophyAt + ' min'}`);
 if (process.env.MILESTONES) for (const m of milestones) console.log(`  min ${m.min}: runs=${m.runs} level=${m.level} rooms sum=${m.sum} ship=${m.ship}`);
-for (const r of results) console.log(`  ${r.zen ? 'zen  ' : 'order'} ${r.track.padEnd(6)} ${String(r.len).padStart(4)}m diff=${r.diff} cruise=${r.cruise}${r.pace ? ' pace=' + r.pace.toFixed(2) : ''} ${r.secs}s score=${r.score} best=${r.best} cargo=${r.cargo}% deliv=${r.delivered}/${r.amount} coins=${r.coins} stars=${r.stars} pay=${r.pay} xp=${r.xp}`);
+for (const r of results) console.log(`  ${r.zen ? 'zen  ' : 'order'} ${r.track.padEnd(6)} ${String(r.len).padStart(4)}m diff=${r.diff} cruise=${r.cruise}${r.pace ? ' pace=' + r.pace.toFixed(2) : ''} ${r.secs}s score=${r.score} best=${r.best} cargo=${r.cargo}% deliv=${r.delivered}/${r.amount} coins=${r.coins} stars=${r.stars}${r.blown ? ' blown=' + r.blown : ''} pay=${r.pay} xp=${r.xp}`);
 if (process.env.LOGS) console.log(logs.slice(-20).join('\n'));

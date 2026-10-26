@@ -74,7 +74,7 @@
     });
     instanced(flat(new THREE.DodecahedronGeometry(1.8, 0)), new THREE.MeshLambertMaterial({ color: 0xffffff }), rocks, function (t) { tmpQ.setFromAxisAngle(new THREE.Vector3(1, 0.3, 0), t.tint * 3); tmpM.compose(tmpP.set(t.x, t.y + 0.6 * t.s, t.z), tmpQ, tmpS.set(t.s * 1.4, t.s, t.s * 1.1)); tmpC.setHex(pal.rock); });
     // камни в воде: отдельные меши, они ещё и препятствия
-    for (i = 0; i < T.rocks.length; i++) { var rk = T.rocks[i], rm = new THREE.Mesh(flat(new THREE.DodecahedronGeometry(rk.r, 0)), mat(pal.rock)); rm.position.set(rk.x, rk.r * 0.25, rk.z); rm.rotation.y = rk.rot; rm.castShadow = true; W.group.add(rm); }
+    for (i = 0; i < T.rocks.length; i++) { var rk = T.rocks[i], rm = new THREE.Mesh(flat(new THREE.DodecahedronGeometry(rk.r, 0)), mat(pal.rock)); rm.position.set(rk.x, rk.r * 0.25, rk.z); rm.rotation.y = rk.rot; rm.castShadow = true; W.group.add(rm); rk.mesh = rm; }
     // буи по кромке и фонари
     var buoyGeo = flat(new THREE.CylinderGeometry(0.5, 0.7, 1.4, 6)), bR = mat(0xe0453a), bG = mat(0x3fbf6a);
     instanced(buoyGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), T.buoys, function (b) { tmpQ.set(0, 0, 0, 1); tmpM.compose(tmpP.set(b.x, 0.5, b.z), tmpQ, tmpS.set(1, 1, 1)); tmpC.setHex(b.left ? 0xe0453a : 0x3fbf6a); });

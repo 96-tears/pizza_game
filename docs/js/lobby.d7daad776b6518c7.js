@@ -6,7 +6,7 @@
   var PORTS = { summer: ['ШАНХАЙ', 'НИНБО', 'НАНТУН', 'ЦИНДАО', 'УХАНЬ'], winter: ['ДИКСОН', 'ТИКСИ', 'ПЕВЕК', 'ДУДИНКА'], rocks: ['СИНГАПУР', 'ПЕНАНГ', 'МАЛАККА', 'ПОРТ-КЛАНГ'], night: ['СТАМБУЛ', 'БЕЙКОЗ', 'ЮСКЮДАР', 'САРЫЕР'] };
 
   // ---------- карьера ----------
-  function fresh() { return { v: 1, coins: 0, xp: 0, level: 1, stock: 20, prodAt: M.now(), rooms: { office: 1, plant: 1, store: 1, dock: 1 }, fleet: ['megalul'], ship: 'megalul', tune: { megalul: {} }, orders: [], orderAt: 0, trophy: false, runs: 0, best: 0, settings: { sound: true } }; }
+  function fresh() { return { v: 1, coins: 0, xp: 0, level: 1, stock: 20, prodAt: M.now(), rooms: { office: 1, plant: 1, store: 1, dock: 1 }, fleet: ['megalul'], ship: 'megalul', tune: { megalul: {} }, orders: [], orderAt: 0, trophy: false, license: false, runs: 0, best: 0, settings: { sound: true } }; }
   function save() { if (!M.DEMO) M.store.save(C); }
   L.career = function () { return C; };
   function roomLvl(k) { return C.rooms[k] || 1; }
@@ -19,9 +19,10 @@
   function tune(id) { return C.tune[id] || (C.tune[id] = {}); }
   function effective() { // характеристики корабля с доработками, в формате, который ждёт заезд
     var s = shipSpec(), t = tune(s.id);
-    return { model: s, cruise: s.speed + 3 * (t.engine || 0), turn: s.turn * (1 + 0.12 * (t.rudder || 0)), grip: s.grip, armour: s.armour * (1 - 0.15 * (t.fenders || 0)), tanks: s.tanks + (t.tanks || 0) };
+    return { model: s, cruise: s.speed + 3 * (t.engine || 0), turn: s.turn * (1 + 0.12 * (t.rudder || 0)), grip: s.grip, armour: s.armour * (1 - 0.15 * (t.fenders || 0)), tanks: s.tanks + (t.tanks || 0), rockets: !!C.license };   // rockets — куплена «Лицензия на убийство», в заезде есть ракеты
   }
   L.effective = effective;
+  function dockShip() { M.studio.setShip(shipSpec(), !!C.license); }   // корабль у стапеля, с пусковой установкой при лицензии
   function tracksOpen() { return D.TRACKS.filter(function (t) { return t.office <= roomLvl('office'); }); }
   function makeOrder(seed) {
     var rand = M.rng(seed), open = tracksOpen(), tr = open[Math.floor(rand() * open.length)], len = D.LENGTHS[Math.floor(rand() * D.LENGTHS.length)];
@@ -50,18 +51,18 @@
   // ---------- вход, выход, обновление экрана ----------
   L.init = function () {
     C = M.store.load(M.validateCareer); if (!C) C = fresh();
-    if (M.DEMO) { C = fresh(); for (var k in C.rooms) C.rooms[k] = M.clamp(M.DEMO.rooms, 1, 5); C.trophy = !!M.DEMO.trophy; C.level = 30; C.coins = 300000; if (M.DEMO.room && ACTIONS[M.DEMO.room]) room = M.DEMO.room; }   // витрина для скриншотов
+    if (M.DEMO) { C = fresh(); for (var k in C.rooms) C.rooms[k] = M.clamp(M.DEMO.rooms, 1, 5); C.trophy = !!M.DEMO.trophy; C.license = !!M.DEMO.license; C.level = 30; C.coins = 300000; if (M.DEMO.room && ACTIONS[M.DEMO.room]) room = M.DEMO.room; }   // витрина для скриншотов
     accrue();
     if (C.pendingRace) { C.stock = Math.min(storeCap(), C.stock + C.pendingRace.amount); C.pendingRace = null; M.store.message = 'Незавершённый рейс отменён. Груз возвращён на склад в пределах его вместимости.'; }
     refreshOrders(); save();
-    M.studio.init(); M.studio.setLevels(C.rooms); M.studio.setShip(shipSpec()); M.studio.setTrophy(C.trophy); M.studio.focus(room, true);
+    M.studio.init(); M.studio.setLevels(C.rooms); dockShip(); M.studio.setTrophy(C.trophy); M.studio.focus(room, true);
     M.bind(el.tabs, function () {});
     Array.prototype.forEach.call(el.tabs.querySelectorAll('[data-room]'), function (b) { b.addEventListener('click', function () { setRoom(b.getAttribute('data-room')); }); });
     el.btnSettings.addEventListener('click', settingsPanel);
     window.addEventListener('keydown', function (e) { if (M.race.isRunning() || M.modal.isOpen() || !L.visible) return; var keys = ['office', 'plant', 'store', 'dock'], i = keys.indexOf(room); if (e.code === 'ArrowRight' || e.code === 'KeyD') setRoom(keys[(i + 1) % 4]); else if (e.code === 'ArrowLeft' || e.code === 'KeyA') setRoom(keys[(i + 3) % 4]); else if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); ordersPanel(); } });
   };
   L.visible = false;
-  L.show = function () { L.visible = true; accrue(); refreshOrders(); el.lobbyUI.classList.remove('hidden'); M.studio.setShip(shipSpec()); M.studio.focus(room, true); paint(); if (!uiTimer) uiTimer = setInterval(function () { if (L.visible) { accrue(); refreshOrders(); paint(); } }, 1000); };
+  L.show = function () { L.visible = true; accrue(); refreshOrders(); el.lobbyUI.classList.remove('hidden'); dockShip(); M.studio.focus(room, true); paint(); if (!uiTimer) uiTimer = setInterval(function () { if (L.visible) { accrue(); refreshOrders(); paint(); } }, 1000); };
   L.hide = function () { L.visible = false; el.lobbyUI.classList.add('hidden'); M.modal.close(); if (uiTimer) { clearInterval(uiTimer); uiTimer = null; } };
   L.update = function (dt) { M.studio.update(dt); };
   function setRoom(k) { room = k; M.studio.focus(k); paint(); }
@@ -77,7 +78,7 @@
     if (el.actions.innerHTML !== h) { el.actions.innerHTML = h; M.bind(el.actions, action); }
     var idx = ['office', 'plant', 'store', 'dock'].indexOf(room), tab = el.tabs.querySelectorAll('[data-room]')[idx];   // пузырь действий висит слева от активной вкладки
     if (tab && tab.getBoundingClientRect) { var tr = tab.getBoundingClientRect(), ur = el.lobbyUI.getBoundingClientRect(); el.actions.style.top = (tr.top + tr.height / 2 - ur.top) + 'px'; }
-    var cheap = D.SHIPS.some(function (s) { return C.fleet.indexOf(s.id) < 0 && s.cls <= D.ROOMS.dock.cls[roomLvl('dock') - 1] && C.coins >= s.price; });
+    var cheap = D.SHIPS.some(function (s) { return C.fleet.indexOf(s.id) < 0 && s.cls <= D.ROOMS.dock.cls[roomLvl('dock') - 1] && C.coins >= s.price; }) || (C.trophy && !C.license && C.coins >= D.LICENSE.price);
     var marks = ['office', 'plant', 'store', 'dock'].map(function (k) { return (canUpgrade(k) ? '⬆' : '') + (k === 'dock' && cheap ? ' ⛴' : ''); });
     Array.prototype.forEach.call(el.tabs.querySelectorAll('.mark'), function (sp, i) { sp.textContent = marks[i]; });
     el.trophyBadge.classList.toggle('hidden', !!C.trophy); el.trophyBadge.innerHTML = '<b>' + Math.min(100, Math.floor(C.coins / D.TROPHY.price * 100)) + '%</b>до Питсы';
@@ -86,6 +87,7 @@
   function action(act) {
     if (act === 'orders') ordersPanel(); else if (act === 'upgrade') upgradePanel(room); else if (act === 'zen') zenPanel(); else if (act === 'prod') prodPanel(); else if (act === 'shop') shopPanel(); else if (act === 'tune') tunePanel();
   }
+  L.panel = action;   // для тестов и отладки: открыть панель по имени действия ('shop', 'orders', 'tune', ...)
 
   // ---------- панели ----------
   function head(title, sub) { return '<div class="sheet-head"><h2>' + title + '</h2><button class="x" data-close>✕</button></div>' + (sub ? '<div class="sub">' + sub + '</div>' : ''); }
@@ -121,7 +123,7 @@
     var h = '<div class="sheet-head"><h2>' + (res.zen ? 'Дзен' : 'Доставлено') + '</h2></div>' + (res.zen ? '' : '<div class="stars">' + sh + '</div>') +
       '<div class="big-num">' + M.fmt(res.score) + '</div><div class="meta center-text">счёт дрифта · лучшая серия ' + M.fmt(res.best) + '</div>' +
       '<div class="score-table">' + (res.zen ? '' : '<span>Сдано</span><span>' + res.delivered + ' из ' + M.tanks(res.amount) + '</span><span>Состояние груза</span><span>' + res.cargo + '%</span>') +
-      '<span>Монеты по пути</span><span>' + res.coins + '</span>' + (res.stars ? '<span>Звёзды</span><span>' + res.stars + '</span>' : '') +
+      '<span>Монеты по пути</span><span>' + res.coins + '</span>' + (res.blown ? '<span>Взорвано ракетами</span><span>' + res.blown + '</span>' : '') + (res.stars ? '<span>Звёзды</span><span>' + res.stars + '</span>' : '') +
       '<span class="total">Получено монет</span><span class="total">' + M.fmt(res.pay) + '</span><span>Опыт</span><span>+' + M.fmt(res.xp) + '</span></div>' +
       (ups ? '<div class="card center-text"><b>Новый уровень: ' + C.level + '</b><p>На верфи открылись новые улучшения.</p></div>' : '') +
       '<button class="btn wide" data-close>На верфь</button>';
@@ -153,10 +155,13 @@
         '<div class="row">' + (owned ? '<span class="meta">' + (sel ? 'у стапеля' : 'в парке') + '</span>' : M.coin(s.price)) + (sel ? '' : owned ? '<button class="btn ghost" data-act="pick" data-key="' + s.id + '">Поставить</button>' : '<button class="btn" data-act="buyship" data-key="' + s.id + '"' + (can ? '' : ' disabled') + '>' + (fits ? 'Купить' : 'Нужен док ' + s.cls) + '</button>') + '</div></div>';
     }
     h += '<div class="card' + (C.trophy ? ' sel' : '') + '"><div class="card-head"><b>' + D.TROPHY.name + '</b><span class="tag hot">цель</span></div><p>' + D.TROPHY.desc + '</p><div class="row">' + M.coin(D.TROPHY.price) + (C.trophy ? '<span class="meta">стоит на площадке</span>' : '<button class="btn green" data-act="trophy"' + (C.coins >= D.TROPHY.price ? '' : ' disabled') + '>Купить</button>') + '</div></div>';
+    // после Питсы в магазине появляется лицензия: одна на всю карьеру, ракеты получают все корабли
+    if (C.trophy) h += '<div class="card' + (C.license ? ' sel' : '') + '"><div class="card-head"><b>' + D.LICENSE.name + '</b><span class="tag hot">' + (C.license ? 'выдана' : 'новинка') + '</span></div><p>' + D.LICENSE.desc + '</p><div class="row">' + (C.license ? '<span class="meta">ракеты стоят на всех кораблях</span>' : M.coin(D.LICENSE.price) + '<button class="btn green" data-act="license"' + (C.coins >= D.LICENSE.price ? '' : ' disabled') + '>Купить</button>') + '</div></div>';
     M.modal.open(h, { actions: function (act, key) {
-      if (act === 'pick' && C.fleet.indexOf(key) >= 0) { C.ship = key; M.studio.setShip(shipSpec()); }
-      else if (act === 'buyship') { var s = D.shipById(key); if (C.fleet.indexOf(key) >= 0 || s.cls > dock || C.coins < s.price) return; C.coins -= s.price; C.fleet.push(key); C.ship = key; M.studio.setShip(s); }
+      if (act === 'pick' && C.fleet.indexOf(key) >= 0) { C.ship = key; dockShip(); }
+      else if (act === 'buyship') { var s = D.shipById(key); if (C.fleet.indexOf(key) >= 0 || s.cls > dock || C.coins < s.price) return; C.coins -= s.price; C.fleet.push(key); C.ship = key; dockShip(); }
       else if (act === 'trophy') { if (C.trophy || C.coins < D.TROPHY.price) return; C.coins -= D.TROPHY.price; C.trophy = true; M.studio.setTrophy(true); }
+      else if (act === 'license') { if (!C.trophy || C.license || C.coins < D.LICENSE.price) return; C.coins -= D.LICENSE.price; C.license = true; dockShip(); }
       save(); shopPanel(); paint();
     } });
   }
@@ -178,14 +183,15 @@
       '<div class="card"><div class="card-head"><b>Платформа</b>' + M.pips(D.rigStage(C.rooms), 5) + '</div><p>' + D.RIG_LOOK[D.rigStage(C.rooms) - 1] + '</p></div>' +
       '<div class="switch"><span>Игра на главном экране</span><button class="btn ghost" data-act="install">Добавить</button></div>' +
       '<div class="switch"><span>Начать карьеру заново</span><button class="btn ghost" data-act="reset">Сбросить</button></div><div class="meta center-text">Сохранение живёт в этом браузере. При перезагрузке незавершённый рейс отменяется, груз возвращается в пределах вместимости склада.</div><div class="meta center-text">Версия ' + M.esc((window.MEGALUL_CONFIG || {}).version || 'dev') + '</div>';
-    M.modal.open(h, { actions: function (act) { if (act === 'install') { window.MEGALUL_INSTALL.show(); return; } if (act === 'reset') { if (!confirm('Стереть карьеру и начать заново?')) return; M.store.clear(); C = fresh(); refreshOrders(); save(); M.modal.close(); M.studio.setLevels(C.rooms); M.studio.setShip(shipSpec()); M.studio.setTrophy(false); paint(); } } });
+    M.modal.open(h, { actions: function (act) { if (act === 'install') { window.MEGALUL_INSTALL.show(); return; } if (act === 'reset') { if (!confirm('Стереть карьеру и начать заново?')) return; M.store.clear(); C = fresh(); refreshOrders(); save(); M.modal.close(); M.studio.setLevels(C.rooms); dockShip(); M.studio.setTrophy(false); paint(); } } });
   }
   function invest() { // автотест: тратит монеты как торопливый игрок: комнаты по порядку, корабль повместительнее, потом трофей
     var keys = ['plant', 'store', 'dock', 'office'], changed = false, i, k, dockCls = D.ROOMS.dock.cls[roomLvl('dock') - 1], want = null;
     for (i = 0; i < D.SHIPS.length; i++) { var s = D.SHIPS[i]; if (C.fleet.indexOf(s.id) < 0 && s.cls <= dockCls && s.tanks > effective().tanks) { if (C.coins >= s.price) { C.coins -= s.price; C.fleet.push(s.id); C.ship = s.id; changed = true; } else if (!want) want = s; } }
     if (!want) for (i = 0; i < keys.length; i++) { k = keys[i]; while (canUpgrade(k)) { C.coins -= D.ROOMS[k].cost[roomLvl(k)]; C.rooms[k] += 1; changed = true; } }   // пока копим на корабль, комнаты ждут
     if (!C.trophy && C.coins >= D.TROPHY.price) { C.coins -= D.TROPHY.price; C.trophy = true; changed = true; }
-    if (changed) { M.studio.setLevels(C.rooms); M.studio.setShip(shipSpec()); M.studio.setTrophy(C.trophy); save(); }
+    if (C.trophy && !C.license && C.coins >= D.LICENSE.price) { C.coins -= D.LICENSE.price; C.license = true; changed = true; }   // после Питсы первым делом лицензия
+    if (changed) { M.studio.setLevels(C.rooms); dockShip(); M.studio.setTrophy(C.trophy); save(); }
   }
   L.autoplay = function () { // для автотеста: вкладывает монеты, берёт первый доступный заказ, иначе дзен
     accrue(); refreshOrders(); invest();

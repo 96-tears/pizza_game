@@ -14,9 +14,9 @@
     if (window.matchMedia('(orientation: portrait) and (pointer: coarse), (max-width: 600px) and (pointer: fine)').matches) M.race.pause();
   }
   window.addEventListener('resize', resize);
-  // параметры в хэше: #autotest, #photo; для витрины и скриншотов #photo&rooms=5&trophy=1&room=dock (карьера-витрина не сохраняется)
+  // параметры в хэше: #autotest, #photo; для витрины и скриншотов #photo&rooms=5&trophy=1&license=1&room=dock (карьера-витрина не сохраняется)
   var HASH = {}; location.hash.slice(1).split('&').forEach(function (p) { var kv = p.split('='); if (kv[0]) HASH[kv[0]] = kv.length > 1 ? kv[1] : true; });
-  if (HASH.rooms) M.DEMO = { rooms: parseInt(HASH.rooms, 10) || 1, trophy: !!HASH.trophy, room: HASH.room };
+  if (HASH.rooms) M.DEMO = { rooms: parseInt(HASH.rooms, 10) || 1, trophy: !!HASH.trophy, license: !!HASH.license, room: HASH.room };
   M.lobby.init(); resize(); M.lobby.show();
 
   var AUTOTEST = !!HASH.autotest, PHOTO = !!HASH.photo, last = 0;

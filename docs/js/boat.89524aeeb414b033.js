@@ -12,6 +12,7 @@
     var seen = new Set();
     function dispose(resource) { if (resource && !seen.has(resource)) { seen.add(resource); resource.dispose(); } }
     root.traverse(function (o) {
+      if (o.isInstancedMesh && o.dispose) o.dispose();   // буферы матриц и цветов экземпляров
       dispose(o.geometry);
       var materials = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
       materials.forEach(function (m) { Object.keys(m).forEach(function (key) { if (m[key] && m[key].isTexture) dispose(m[key]); }); dispose(m); });
@@ -29,7 +30,7 @@
   }
 
   // Танкер игрока. spec из M.D.SHIPS. Возвращает группу; userData.len и userData.half для столкновений.
-  M.buildShip = function (spec) {
+  M.buildShip = function (spec, extra) {   // extra.rockets — куплена «Лицензия на убийство», на баке стоит пусковая установка
     var g = new THREE.Group(), k = spec.size || 1, len = 24 * k, half = 4.6 * k;
     var mHull = mat(spec.hull), mDeck = mat(spec.deck), mHouse = mat(spec.house), mStripe = mat(spec.stripe), mTank = mat(0xf2f3f0), mDark = mat(0x2b3038), mGlass = mat(0x1d4b66), mSteel = mat(0x8a9096);
     var hull = new THREE.Mesh(hullGeo(len, half, 2.6 * k), mHull); hull.position.y = -0.4 * k; hull.castShadow = true; hull.receiveShadow = true; g.add(hull);
@@ -58,6 +59,18 @@
     var red = new THREE.Mesh(new THREE.SphereGeometry(0.25 * k, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff4a3a })); red.position.set(-len * 0.35, 8.6 * k, half * 0.7); g.add(red);
     var green = new THREE.Mesh(new THREE.SphereGeometry(0.25 * k, 6, 5), new THREE.MeshBasicMaterial({ color: 0x4aff7a })); green.position.set(-len * 0.35, 8.6 * k, -half * 0.7); g.add(green);
     g.userData = { len: len, half: half, headlight: lamp };
+    if (extra && extra.rockets) {   // пусковая установка на баке: станина, две трубы с ракетами, чуть задранные вверх; точка вылета в осях корабля
+      var lx = len * 0.24, ly = 3.3 * k, mTube = mat(0x3b4146), mRocket = mat(0xf4f4f0), mTip = mat(0xff7a2e), tubes = [];
+      box(2.4 * k, 0.5 * k, 2.8 * k, mDark, lx, ly - 0.45 * k, 0, g);
+      var rack = new THREE.Group(); rack.position.set(lx, ly, 0); rack.rotation.z = 0.16; g.add(rack);
+      for (var sd2 = -1; sd2 <= 1; sd2 += 2) {
+        cyl(0.38 * k, 0.38 * k, 2.8 * k, 8, mTube, 0, 0, sd2 * 0.6 * k, rack, Math.PI / 2);
+        var body = cyl(0.26 * k, 0.26 * k, 2.2 * k, 8, mRocket, 0.3 * k, 0, sd2 * 0.6 * k, rack, Math.PI / 2);
+        var tip = new THREE.Mesh(flat(new THREE.ConeGeometry(0.26 * k, 0.7 * k, 8)), mTip); tip.rotation.z = -Math.PI / 2; tip.position.set(1.75 * k, 0, sd2 * 0.6 * k); tip.castShadow = true; rack.add(tip);
+        tubes.push([body, tip]);
+      }
+      g.userData.launcher = { x: lx + 1.4 * k, y: ly + 0.3 * k, spread: 0.6 * k }; g.userData.tubes = tubes;
+    }
     return g;
   };
 
@@ -65,11 +78,11 @@
   M.buildTraffic = function (kind, rand) {
     var g = new THREE.Group(), barge = kind === 'barge', len = barge ? 26 : 12, half = barge ? 3.6 : 2.2;
     var cols = barge ? [0x3b4a5a, 0x5a4a3b, 0x2f5a4a, 0x6b3a3a] : [0x2a6fb0, 0xd9d2c0, 0x6f8f3a, 0xc9573a];
-    var mHull = mat(cols[Math.floor(rand() * cols.length)]), white = mat(0xeeeeea), dark = mat(0x3b4146);
+    var col = cols[Math.floor(rand() * cols.length)], mHull = mat(col), white = mat(0xeeeeea), dark = mat(0x3b4146);
     var hull = new THREE.Mesh(hullGeo(len, half, 2.2), mHull); hull.position.y = -0.3; hull.castShadow = true; g.add(hull);
     if (barge) { box(len * 0.55, 2.2, half * 1.5, mat(rand() < 0.5 ? 0x8a6a3a : 0x6a7a86), 2, 2.9, 0, g); box(3.4, 3, half * 1.5, white, -len / 2 + 3, 3.3, 0, g); box(0.2, 0.9, half * 1.4, mat(0x1d4b66), -len / 2 + 4.75, 3.9, 0, g, false); }
     else { box(3.6, 2.2, 3, white, -1.2, 2.9, 0, g); box(0.2, 0.8, 2.8, mat(0x1d4b66), 0.7, 3.3, 0, g, false); cyl(0.08, 0.1, 4, 6, dark, -1.5, 5.8, 0, g); }
-    g.userData = { len: len, half: half };
+    g.userData = { len: len, half: half, color: col };   // цвет корпуса нужен обломкам при взрыве
     return g;
   };
 

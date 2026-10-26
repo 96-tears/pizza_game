@@ -6,8 +6,8 @@
   var keys = { left: false, right: false }, zones = {};
   var camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camDir = 0, camInit = false;
   var spray, sprayN = 420, sprayAlive = [], sprayIdx = 0, tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpP = new THREE.Vector3(), tmpS = new THREE.Vector3();
-  var el = {}, live = null, headlight = null, finishTimer = null;
-  ['raceUI', 'raceProgress', 'driftScore', 'cargo', 'speed', 'banner', 'popups', 'btnPause'].forEach(function (id) { el[id] = M.el(id); });
+  var el = {}, live = null, headlight = null, finishTimer = null, RK = null;   // RK — ракеты «Лицензии на убийство», null без лицензии
+  ['raceUI', 'raceProgress', 'driftScore', 'cargo', 'speed', 'banner', 'popups', 'btnPause', 'btnFire'].forEach(function (id) { el[id] = M.el(id); });
 
   // ---------- старт и остановка ----------
   // o: { order: {track, lengthM, difficulty, amount, ports, pay, seed, zen}, ship: {cruise, turn, grip, armour, model (D.SHIPS entry), tanks}, onEnd(result), onQuit() }
@@ -20,32 +20,36 @@
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(60, 9 / 16, 0.5, 1600);
     world = M.buildWorld(T, def, scene);
-    ship = M.buildShip(spec.model); scene.add(ship);
+    ship = M.buildShip(spec.model, { rockets: !!spec.rockets }); scene.add(ship);
     headlight = new THREE.SpotLight(0xfff0d0, def.night ? 2.2 : 0, 160, 0.5, 0.5, 1); headlight.position.set(spec.model.size * 10, 4, 0); headlight.target.position.set(140, -4, 0); ship.add(headlight); ship.add(headlight.target);
     S = M.newShipState(T);
     var perPort = T.ports.length ? Math.floor(o.order.amount / T.ports.length) : 0;
     G = { t: 0, score: 0, session: 0, sessionT: 0, mult: 1, grace: 0, cargo: 100, coins: 0, stars: 0, delivered: 0, onBoard: o.order.amount, perPort: perPort, hitCool: 0, shake: 0, finished: false, sessionBest: 0 };
     G.safeS = S.s; G.progressAt = 0;
     resetInput(); camPos.set(0, 0, 0);
-    makeSpray(); camInit = false; running = true; paused = false;
+    makeSpray(); RK = spec.rockets ? M.makeRockets(scene, T, ship, { pop: function (text, cls, x, z) { pop(text, cls, 0, x, z); }, shake: shakeAt }) : null;
+    el.btnFire.classList.toggle('hidden', !RK); el.btnFire.classList.toggle('touch', M.isTouch);   // кнопка ракеты: на телефоне без подписи «пробел»
+    camInit = false; running = true; paused = false;
     el.raceUI.classList.remove('hidden'); el.popups.innerHTML = ''; live = null;
     el.driftScore.textContent = '0'; el.cargo.textContent = '100%'; el.speed.textContent = ''; el.raceProgress.style.width = '0%';
     banner(o.order.zen ? 'ДЗЕН' : def.name.toUpperCase(), 1.6);
     bindInput();
     R.resize();
   };
-  R.stop = function () { running = false; clearTimeout(finishTimer); clearTimeout(banner.t); unbindInput(); el.raceUI.classList.add('hidden'); if (scene) M.disposeTree(scene); world = null; scene = null; ship = null; spray = null; headlight = null; T = null; S = null; camera = null; sprayAlive = []; live = null; el.popups.innerHTML = ''; };
+  R.stop = function () { running = false; clearTimeout(finishTimer); clearTimeout(banner.t); unbindInput(); el.raceUI.classList.add('hidden'); if (scene) M.disposeTree(scene); world = null; scene = null; ship = null; spray = null; headlight = null; T = null; S = null; camera = null; sprayAlive = []; live = null; RK = null; el.btnFire.classList.add('hidden'); el.popups.innerHTML = ''; };
   R.resize = function () { if (!camera) return; var c = M.el('gl'); camera.aspect = (c.clientWidth || 9) / (c.clientHeight || 16); camera.updateProjectionMatrix(); };
   R.isRunning = function () { return running; };
   R.scene = function () { return scene; }; R.camera = function () { return camera; };
-  R.status = function () { return running ? { time: G.t, progress: S.s, length: T.finish.s, paused: paused } : null; };
+  R.status = function () { return running ? { time: G.t, progress: S.s, length: T.finish.s, paused: paused, rockets: !!RK, blown: RK ? RK.blown : 0, flying: RK ? RK.flying.length : 0 } : null; };
   // автопилот для автотеста: целится в ось на две секунды хода впереди, на поворотах держит руль дольше нужного, чтобы корма срывалась
   R.autopilot = function () {
     if (!running || paused || G.finished) return false;
     var q = T.nearest(S.x, S.z, S.idx), aim = T.atS(q.s + Math.max(30, S.sp * 1.9), 0), want = Math.atan2(aim.z - S.z, aim.x - S.x), err = M.angDiff(want, S.a) + Math.sin(G.t * 0.7) * 0.25;
-    keys.right = err > 0.06; keys.left = err < -0.06; return true;
+    keys.right = err > 0.06; keys.left = err < -0.06;
+    if (RK && RK.aim(S)) RK.want = true;   // с лицензией автопилот стреляет по всему, что впереди
+    return true;
   };
-  R.debug = function () { return S ? 's=' + Math.round(S.s) + '/' + Math.round(T.finish.s) + ' pace=' + spec.pace.toFixed(2) + ' sp=' + S.sp.toFixed(1) + ' slip=' + S.slip.toFixed(2) + ' score=' + Math.round(G.score) + ' cargo=' + Math.round(G.cargo) + ' coins=' + G.coins + ' ports=' + T.ports.map(function (p) { return p.done ? 'ok' : p.missed ? 'miss' : '.'; }).join('') + ' deliv=' + G.delivered + '/' + opts.order.amount : '-'; };
+  R.debug = function () { return S ? 's=' + Math.round(S.s) + '/' + Math.round(T.finish.s) + ' pace=' + spec.pace.toFixed(2) + ' sp=' + S.sp.toFixed(1) + ' slip=' + S.slip.toFixed(2) + ' score=' + Math.round(G.score) + ' cargo=' + Math.round(G.cargo) + ' coins=' + G.coins + ' ports=' + T.ports.map(function (p) { return p.done ? 'ok' : p.missed ? 'miss' : '.'; }).join('') + ' deliv=' + G.delivered + '/' + opts.order.amount + (RK ? ' blown=' + RK.blown : '') : '-'; };
 
   // ---------- ввод: клавиши и половины экрана ----------
   function onKey(e) {
@@ -59,6 +63,7 @@
     if (M.modal.isOpen() || paused) return;
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys.left = down; e.preventDefault(); }
     else if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys.right = down; e.preventDefault(); }
+    else if (e.code === 'Space') { e.preventDefault(); if (RK && !e.repeat) RK.want = true; }   // пробел: ракета по ближайшему препятствию впереди
     else if (down && (e.code === 'KeyP' || e.code === 'Escape')) togglePause();
   }
   function resetInput() { keys.left = keys.right = false; Object.keys(zones).forEach(function (k) { zones[k].classList.remove('on'); }); }
@@ -75,11 +80,13 @@
       z._h = [on, off];
     });
     el.btnPause.onclick = togglePause;
+    el.btnFire.onpointerdown = function (e) { e.preventDefault(); if (RK && !paused && !M.modal.isOpen()) RK.want = true; };
   }
   function unbindInput() {
     window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); keys.left = keys.right = false;
     window.removeEventListener('blur', loseFocus); document.removeEventListener('visibilitychange', visibility);
     Array.prototype.forEach.call(el.raceUI.querySelectorAll('.zone'), function (z) { if (z._h) { z.removeEventListener('pointerdown', z._h[0]); z.removeEventListener('pointerup', z._h[1]); z.removeEventListener('pointercancel', z._h[1]); z.removeEventListener('pointerleave', z._h[1]); } z.classList.remove('on'); });
+    el.btnFire.onpointerdown = null;
   }
   function togglePause() {
     if (!running || G.finished) return;
@@ -93,8 +100,8 @@
 
   // ---------- подписи рядом с кораблём ----------
   function screenPos(x, y, z) { tmpP.set(x, y, z).project(camera); var c = M.el('gl'); return { x: (tmpP.x * 0.5 + 0.5) * c.clientWidth, y: (-tmpP.y * 0.5 + 0.5) * c.clientHeight }; }
-  function pop(text, cls, dy) {
-    var p = screenPos(S.x, 3, S.z), d = document.createElement('div'); d.className = 'pop' + (cls ? ' ' + cls : ''); d.innerHTML = text;
+  function pop(text, cls, dy, x, z) {   // x, z — точка в мире, по умолчанию над кораблём
+    var p = screenPos(x == null ? S.x : x, 3, z == null ? S.z : z), d = document.createElement('div'); d.className = 'pop' + (cls ? ' ' + cls : ''); d.innerHTML = text;
     d.style.left = p.x + 'px'; d.style.top = (p.y - 40 + (dy || 0)) + 'px'; el.popups.appendChild(d); setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 1200);
   }
   function banner(text, dur) { el.banner.textContent = text; el.banner.classList.add('show'); clearTimeout(banner.t); banner.t = setTimeout(function () { el.banner.classList.remove('show'); }, dur * 1000); }
@@ -119,7 +126,7 @@
     var geo = new THREE.PlaneGeometry(1.5, 1.5); geo.rotateX(-Math.PI / 2);
     spray = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }), sprayN);
     sprayAlive = []; for (var i = 0; i < sprayN; i++) { sprayAlive.push({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rot: 0, s: 1 }); tmpM.makeScale(0, 0, 0); spray.setMatrixAt(i, tmpM); }
-    spray.instanceMatrix.needsUpdate = true; scene.add(spray);
+    spray.instanceMatrix.needsUpdate = true; spray.frustumCulled = false; scene.add(spray);   // экземпляры далеко от начала координат: без этого рендерер отсекает их по сфере пустой геометрии
   }
   function spawnSpray(x, z, vx, vz, n) {
     for (var k = 0; k < n; k++) { var p = sprayAlive[sprayIdx]; sprayIdx = (sprayIdx + 1) % sprayN; p.life = 0.9 + Math.random() * 0.6; p.x = x + (Math.random() - 0.5) * 5; p.y = 0.3 + Math.random() * 1.5; p.z = z + (Math.random() - 0.5) * 5; p.vx = vx * 0.3 + (Math.random() - 0.5) * 9; p.vy = 2 + Math.random() * 5; p.vz = vz * 0.3 + (Math.random() - 0.5) * 9; p.rot = Math.random() * 6.28; p.s = 0.7 + Math.random() * 1.1; }
@@ -137,8 +144,8 @@
   // ---------- столкновения: берега, камни, трафик ----------
   function collide(dt) {
     var fx = Math.cos(S.a), fz = Math.sin(S.a), L = ship.userData.len, r = ship.userData.half + 0.4, probes = [-0.38 * L, 0, 0.38 * L], hit = false, i, j;
-    var circles = T.rocks.slice();
-    for (i = 0; i < T.traffic.length; i++) { var tr = T.traffic[i], d = tr.mesh.userData.len / 2 - tr.mesh.userData.half, cx = Math.cos(tr.a), cz = Math.sin(tr.a); circles.push({ x: tr.x + cx * d, z: tr.z + cz * d, r: tr.mesh.userData.half + 0.6, tr: tr }); circles.push({ x: tr.x - cx * d, z: tr.z - cz * d, r: tr.mesh.userData.half + 0.6, tr: tr }); }
+    var circles = T.rocks.filter(function (rk) { return !rk.dead; });   // взорванные ракетой камни и суда больше не препятствия
+    for (i = 0; i < T.traffic.length; i++) { var tr = T.traffic[i]; if (tr.dead) continue; var d = tr.mesh.userData.len / 2 - tr.mesh.userData.half, cx = Math.cos(tr.a), cz = Math.sin(tr.a); circles.push({ x: tr.x + cx * d, z: tr.z + cz * d, r: tr.mesh.userData.half + 0.6, tr: tr }); circles.push({ x: tr.x - cx * d, z: tr.z - cz * d, r: tr.mesh.userData.half + 0.6, tr: tr }); }
     for (i = 0; i < probes.length; i++) {
       var px = S.x + fx * probes[i], pz = S.z + fz * probes[i], q = T.nearest(px, pz, S.idx), lim = q.hw - r + 1;
       if (Math.abs(q.off) > lim) { var sg = q.off > 0 ? 1 : -1; hurt(M.impact(S, sg * Math.sin(q.a), -sg * Math.cos(q.a), Math.abs(q.off) - lim), 'bank'); hit = true; }
@@ -155,6 +162,8 @@
     }
   }
 
+  function shakeAt(x, z, size) { var dx = x - S.x, dz = z - S.z, d = Math.sqrt(dx * dx + dz * dz); G.shake = Math.max(G.shake, Math.min(1.8, size * 70 / Math.max(25, d))); }   // тряска от взрыва: сильнее вблизи
+
   // ---------- шаг заезда ----------
   R.update = function (dt) {
     if (!running || paused) return;
@@ -169,6 +178,7 @@
     }
     stepTraffic(dt);
     if (!G.finished) collide(dt);
+    if (RK) RK.update(dt, S, !G.finished);   // ракеты: нажатие, полёт, взрывы, частицы
     // дрифт: очки идут, пока есть угол и ход; короткий разрыв прощается, множитель растёт с длительностью серии
     if (S.drifting && S.sp > 6) {
       var qual = M.smooth((S.slip - 0.18) / 0.35) * (1 - M.smooth((S.slip - 0.95) / 0.3));
@@ -201,7 +211,7 @@
   }
   function stepTraffic(dt) {
     for (var i = 0; i < T.traffic.length; i++) {
-      var tr = T.traffic[i]; tr.s += tr.dir * tr.speed * dt;
+      var tr = T.traffic[i]; if (tr.dead) continue; tr.s += tr.dir * tr.speed * dt;
       if (tr.dir < 0 && tr.s < 40) tr.s = T.runLen - 60; if (tr.dir > 0 && tr.s > T.runLen - 40) tr.s = 60;
       var p = T.atS(tr.s, tr.off * T.atS(tr.s, 0).hw); tr.x = p.x; tr.z = p.z; tr.a = tr.dir > 0 ? p.a : p.a + Math.PI;
       tr.mesh.position.set(tr.x, 0, tr.z); tr.mesh.rotation.y = -tr.a;
@@ -224,7 +234,7 @@
     var o = opts.order, share = o.amount ? G.delivered / o.amount : 1, cargoK = 0.4 + 0.6 * G.cargo / 100;
     var pay = (o.zen ? 0 : Math.round(o.pay * share * cargoK)) + G.coins * 20;
     var xp = Math.round(G.score) + G.stars * 400 + (o.zen ? 0 : Math.round(o.pay * 0.6 * share * cargoK));
-    var result = { score: Math.round(G.score), best: G.sessionBest, coins: G.coins, stars: G.stars, cargo: Math.round(G.cargo), delivered: G.delivered, amount: o.amount, time: G.t, pay: pay, xp: xp, zen: !!o.zen };
+    var result = { score: Math.round(G.score), best: G.sessionBest, coins: G.coins, stars: G.stars, cargo: Math.round(G.cargo), delivered: G.delivered, amount: o.amount, time: G.t, pay: pay, xp: xp, zen: !!o.zen, blown: RK ? RK.blown : 0 };
     finishTimer = setTimeout(function () { if (running) { R.stop(); if (opts.onEnd) opts.onEnd(result); } }, 1500);
   }
 

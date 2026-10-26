@@ -26,7 +26,7 @@
     return { v: 1, coins: c.coins, xp: c.xp, level: c.level, stock: Math.min(c.stock, M.D.ROOMS.store.cap[rooms.store - 1]),
       prodAt: num(c.prodAt, 0, M.now()) ? c.prodAt : M.now(), rooms: rooms, fleet: fleet, ship: c.ship, tune: tune,
       orders: orders, orderAt: num(c.orderAt, 0, M.now() + M.D.ORDER_EVERY * 1000) ? c.orderAt : 0,
-      trophy: c.trophy === true, runs: int(c.runs, 0, 1e9) ? c.runs : 0, best: num(c.best, 0, 1e12) ? c.best : 0,
+      trophy: c.trophy === true, license: c.license === true, runs: int(c.runs, 0, 1e9) ? c.runs : 0, best: num(c.best, 0, 1e12) ? c.best : 0,
       settings: { sound: !!(c.settings && c.settings.sound) }, pendingRace: pending };
   };
 })();

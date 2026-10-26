@@ -121,3 +121,34 @@ test('completed zen run pays for collected coins', () => {
   assert.ok(result,'zen run should finish'); assert.ok(result.coins > 0);
   assert.equal(result.pay,result.coins * 20);
 });
+
+test('license to kill is sold only after the trophy, arms every ship and survives reload', () => {
+  const h = ready(); const c = h.M.lobby.career();
+  h.M.lobby.panel('shop'); assert.doesNotMatch(h.els.modal.innerHTML, /Лицензия/);
+  c.trophy = true; c.coins = 100; h.M.lobby.panel('shop'); assert.match(h.els.modal.innerHTML, /Лицензия на убийство/);
+  assert.equal(h.M.lobby.effective().rockets, false);
+  h.M.modal.close(); h.M.lobby.autoplay();   // автотест покупает лицензию, как только есть Питса и 100 монет
+  assert.equal(h.M.lobby.career().license, true); assert.equal(h.M.lobby.career().coins, 0);
+  assert.equal(h.M.race.status().rockets, true);
+  h.M.race.stop();
+  const again = ready(h.storage); assert.equal(again.M.lobby.career().license, true); assert.equal(again.M.lobby.effective().rockets, true);
+  for (const value of ['{"v":1}', '[]']) assert.equal(ready({'megalul-career': value}).M.lobby.career().license, false);
+});
+
+test('rocket blows up the rock ahead, the ship passes unharmed, without rockets the rock hits the cargo', () => {
+  function run(rockets) {
+    const h = ready(); const makeTrack = h.M.makeTrack; let rock;
+    // сид 7: река начинается прямым участком, камень стоит в 90 м прямо по курсу; без руля корабль идёт на него
+    h.M.makeTrack = spec => { const t = makeTrack(spec); rock = { x: t.start.x + Math.cos(t.start.a) * 90, z: t.start.z + Math.sin(t.start.a) * 90, r: 3, rot: 0 }; t.rocks.push(rock); return t; };
+    h.M.race.start({ order: { zen: true, seed: 7, track: 'summer', lengthM: 2600, difficulty: 0.3, amount: 0, ports: 0, pay: 0 }, ship: { ...h.M.lobby.effective(), rockets }, onEnd() {} });
+    assert.equal(h.M.race.status().rockets, rockets);
+    h.sandbox.dispatch('keydown', { code: 'Space' }); h.M.race.update(0.1);
+    assert.equal(h.M.race.status().flying, rockets ? 1 : 0);   // пробел пускает ракету только с лицензией
+    for (let i = 0; i < 120 && h.M.race.status().progress < 150; i++) h.M.race.update(0.1);
+    const out = { rock, status: h.M.race.status(), cargo: h.els.cargo.textContent }; h.M.race.stop(); return out;
+  }
+  const armed = run(true);
+  assert.equal(armed.rock.dead, true); assert.equal(armed.rock.mesh.visible, false); assert.ok(armed.status.blown >= 1); assert.equal(armed.cargo, '100%');
+  const control = run(false);
+  assert.notEqual(control.rock.dead, true); assert.equal(control.status.blown, 0); assert.notEqual(control.cargo, '100%');
+});

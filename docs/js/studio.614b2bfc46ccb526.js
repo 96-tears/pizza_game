@@ -7,7 +7,7 @@
   var ST = M.studio = {};
   var scene, cam, sun, yard, roomsRoot, decoRoot, ocean, oceanFar, deckMat, legMat, foam = [], buoys = [], farShip = null, walls = [], stripes = [], crossStripes = [], floors = {};
   var levels = { office: 1, plant: 1, store: 1, dock: 1 }, stage = 1, az = Math.PI / 4, azTarget = az;
-  var shipHolder = null, shipMesh = null, shipSpec = null, trophyMesh = null, tankSlots = [], t = 0, spinners = [], anims = [];
+  var shipHolder = null, shipMesh = null, shipSpec = null, shipRockets = false, trophyMesh = null, tankSlots = [], t = 0, spinners = [], anims = [];
   var ROOM = 18, H = 9, E = ROOM, DECK = ROOM + 8, LEG = DECK - 4, SEA = -13, PAD = { x: DECK + 4, z: 14, r: 8.5 };
   // комнаты по четвертям: угол камеры = atan2(cx, cz); вкладки идут по кругу через 90°
   ST.rooms = { office: { cx: 9, cz: 9 }, plant: { cx: -9, cz: 9 }, store: { cx: -9, cz: -9 }, dock: { cx: 9, cz: -9 } };
@@ -300,9 +300,10 @@
     clear(roomsRoot); clear(decoRoot); tankSlots = []; spinners = []; anims = []; shipHolder = null; shipMesh = null;
     for (k in ST.rooms) { var r = ST.rooms[k], sx = r.cx > 0 ? 1 : -1, sz = r.cz > 0 ? 1 : -1, g = new THREE.Group(); g.position.set(r.cx, 0.3, r.cz); g.scale.set(sx, 1, sz); roomsRoot.add(g); BUILD[k](g, levels[k], sx, sz); }   // комнаты собираются в одной системе координат и зеркалятся по четвертям
     buildDeco(decoRoot);
-    if (shipSpec) ST.setShip(shipSpec);
+    if (shipSpec) ST.setShip(shipSpec, shipRockets);
   };
-  ST.setShip = function (spec) { if (shipMesh && shipSpec === spec) return; shipSpec = spec; if (!shipHolder) return; if (shipMesh) { shipHolder.remove(shipMesh); M.disposeTree(shipMesh); } shipMesh = M.buildShip(spec); shipMesh.position.y = 0.4; shipHolder.add(shipMesh); };
+  // rockets — куплена «Лицензия на убийство»: корабль у стапеля стоит с пусковой установкой
+  ST.setShip = function (spec, rockets) { rockets = !!rockets; if (shipMesh && shipSpec === spec && shipRockets === rockets) return; shipSpec = spec; shipRockets = rockets; if (!shipHolder) return; if (shipMesh) { shipHolder.remove(shipMesh); M.disposeTree(shipMesh); } shipMesh = M.buildShip(spec, { rockets: rockets }); shipMesh.position.y = 0.4; shipHolder.add(shipMesh); };
   ST.setStock = function (stock, cap) { var n = tankSlots.length, show = Math.round(M.clamp(stock / cap, 0, 1) * n); for (var i = 0; i < n; i++) { tankSlots[i][0].visible = i < show; tankSlots[i][1].visible = i < show; } };
   // трофей-коробка стоит на площадке открытой крышкой к камере конторы
   ST.setTrophy = function (has) { if (has && !trophyMesh) { trophyMesh = M.buildTrophy(); trophyMesh.position.set(PAD.x, 0.42, PAD.z); trophyMesh.rotation.y = 1.3; yard.add(trophyMesh); } if (!has && trophyMesh) { yard.remove(trophyMesh); M.disposeTree(trophyMesh); trophyMesh = null; } };
